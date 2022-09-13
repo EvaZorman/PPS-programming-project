@@ -7,11 +7,11 @@ A scalable and customizable simulator of inter-AS routing using BGP protocol.
 1. Install git!
 2. Clone the repository
 ```
-git clone https://github.com/Ormly/dJBox-server.git
+git clone https://github.com/EvaZorman/PPS-programming-project
 ```
 3. enter the working directory
 ```
-cd dJBox-server
+cd PPS-programming-project
 ```
 
 <b>Want to start to write some code?</b>
