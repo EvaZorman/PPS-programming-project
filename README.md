@@ -1,4 +1,4 @@
-# PSP-programming-project
+# PPS-programming-project
 A scalable and customizable simulator of inter-AS routing using BGP protocol.
 
 ### git quick guide
