@@ -31,12 +31,15 @@ class BGP_Router:
         self.routerobject.listen(11)
 
     def accept(self):
-        self.clientsocket, self.clientaddress = self.routerobject.accept()
-        print('received connection from: ', str(self.clientaddress)+'\r\n')
-    def send(self,message):
-        self.routerobject.send(message.encode('ascii'))
-    def close(self):
-        self.routerobject.close()
+	while True:
+        	self.clientsocket, self.clientaddress = self.routerobject.accept()
+        	print('received connection from: ', str(self.clientaddress)+'\r\n')
+        	self.clientsocket.send(message.encode('thank you',encode('ascii'))
+		self.clientsocket.close()
+    #def send(self,message):
+        #self.routerobject.send(message.encode('ascii'))
+    #def close(self):
+        #self.routerobject.close()
     def connect(self, server_IP, server_port):
         self.routerobject.connect((server_IP,server_port))
         self.incoming_msg = self.routerobject.recv(2048)
@@ -68,8 +71,14 @@ class BGP_Router:
 
 
 
-a = BGP_Router("IDLE",'127.1.1.15',5555) #for test
-
+a1 = BGP_Router("IDLE",'127.1.1.15',555) #for test
+a2 = BGP_Router("IDLE",'127.1.1.16',556)
+a3 = BGP_Router("IDLE",'127.1.1.17',557)
+a1.listen()
+a1.connect()
+a2.listen()
+a2.connect()
+a3.connect((a1.ip,a1.port))
 # this part creates a list of potential useful IPs for simulating 10 different routers
 ip_oct = [i for i in range (2,14)]
 interfacce_list = []
