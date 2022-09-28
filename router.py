@@ -1,5 +1,5 @@
 import socket
-
+from threading import Thread
 """
 use class BGP_router to create router objects.
 
@@ -16,7 +16,6 @@ in the headers in binary format.
 
 4- should you have any question feel free to ask me anytime.
 """
-
 # The following class creates a server socket (each port can be used as either server or client.
 # no port can be used as both
 class router_server:
@@ -38,6 +37,7 @@ class router_server:
     def accept(self):
         while True:
             print('p2')
+
             self.clientsocket, self.clientaddress = self.routerobject.accept()
             print('received connection from: ', str(self.clientaddress) + '\r\n')
             print('p3')
@@ -57,6 +57,7 @@ class router_client:
         self.routerobject = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.incoming_msg = ''
 
+
     def connect(self, server_IP, server_port):
         print('c1')
 
@@ -68,15 +69,18 @@ class router_client:
         print(self.incoming_msg.decode('ascii'))
         print('c3')
 
+def servers():
+    a1 = router_server("IDLE", '127.0.0.2', 444)  # for test
+    a1.listen()
+    a1.accept()
 
-a1 = router_server("IDLE", '127.0.0.2', 444)  # for test
-a3 = router_client("IDLE", '127.0.0.3', 557)
+def clients():
+    a3 = router_client("IDLE", '127.0.0.3', 557)
+    a3.connect('127.0.0.2', 444)
 
-a1.listen()
-a3.connect('127.0.0.2', 444)
-
-a1.accept()
-a3.connect('127.0.0.2', 444)
+if __name__ == '__main__':
+    Thread(target = servers).start()
+    Thread(target = clients).start()
 
 # a3.connect(a1.ip,a1.port)
 
