@@ -20,33 +20,29 @@ in the headers in binary format.
 # The following class creates a server socket (each port can be used as either server or client.
 # no port can be used as both
 class router_server:
-    def __init__(self,state,ip,port):
+    def __init__(self, state, ip, port):
         self.state = state
         self.ip = ip
         self.port = port
         self.routerobject = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.routerobject.bind((self.ip,self.port))
+        self.routerobject.bind((self.ip, self.port))
         self.clientsocket = 0
-        self.clientaddress = '0.0.0.0' #sample will never be used
+        self.clientaddress = '0.0.0.0'  # sample will never be used
         self.incoming_msg = ''
 
     def listen(self):
         self.routerobject.listen(11)
 
-        print('p4')
+        print('p1')
 
     def accept(self):
         while True:
-            print('p5')
+            print('p2')
             self.clientsocket, self.clientaddress = self.routerobject.accept()
             print('received connection from: ', str(self.clientaddress) + '\r\n')
-            print('s')
+            print('p3')
             self.clientsocket.send('thank you'.encode('ascii'))
             self.clientsocket.close()
-    #def send(self,message):
-        #self.routerobject.send(message.encode('ascii'))
-    #def close(self):
-        #self.routerobject.close()
 
 #------------------------------------------------------------------
 # the following class makes client socket objects
@@ -60,32 +56,32 @@ class router_client:
         self.port = port
         self.routerobject = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.incoming_msg = ''
-        #self.routerobject.connect(('127.1.1.16', 556))
 
     def connect(self, server_IP, server_port):
         print('c1')
 
-        self.routerobject.connect((server_IP,server_port))
+        self.routerobject.connect((server_IP, server_port))
 
-        self.incoming_msg = self.routerobject.recv(1024)
+        self.incoming_msg = self.routerobject.recv(1024)  # GETS STUCK ON THIS LINE
         print('c2')
 
         print(self.incoming_msg.decode('ascii'))
-        print('c2')
-host1 = socket.gethostname()
-host2 = socket.gethostname()
-host3 = socket.gethostname()
+        print('c3')
 
-a1 = router_server("IDLE",'127.0.0.2',444) #for test
-a2 = router_server("IDLE",host2,556)
-a3 = router_client("IDLE",host3,557)
-#a3.connect('127.1.1.16','556')
+
+a1 = router_server("IDLE", '127.0.0.2', 444)  # for test
+a3 = router_client("IDLE", '127.0.0.3', 557)
+
 a1.listen()
-a1.accept()
-a3.connect(a1.ip,a1.port)
+a3.connect('127.0.0.2', 444)
 
-a2.listen()
-a2.accept()
+a1.accept()
+a3.connect('127.0.0.2', 444)
+
+# a3.connect(a1.ip,a1.port)
+
+# a2.listen()
+# a2.accept()
 # this part creates a list of potential useful IPs for simulating 10 different routers
 ip_oct = [i for i in range (2,14)]
 interfacce_list = []
