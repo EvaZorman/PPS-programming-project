@@ -3,6 +3,8 @@ from threading import Thread
 """
 use class BGP_router to create router objects.
 
+I have used Multi Threading to run servers and clients concurrently.
+
 steps:
 
 1- use a loop to create 10 different objects with 10 different IPs. you can use list
@@ -63,7 +65,7 @@ class router_client:
 
         self.routerobject.connect((server_IP, server_port))
 
-        self.incoming_msg = self.routerobject.recv(1024)  # GETS STUCK ON THIS LINE
+        self.incoming_msg = self.routerobject.recv(1024)
         print('c2')
 
         print(self.incoming_msg.decode('ascii'))
