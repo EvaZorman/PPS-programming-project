@@ -33,14 +33,16 @@ class router_server:
     def listen(self):
         self.routerobject.listen(11)
 
+        print('p4')
+
     def accept(self):
         while True:
+            print('p5')
             self.clientsocket, self.clientaddress = self.routerobject.accept()
             print('received connection from: ', str(self.clientaddress) + '\r\n')
             print('s')
             self.clientsocket.send('thank you'.encode('ascii'))
             self.clientsocket.close()
-
     #def send(self,message):
         #self.routerobject.send(message.encode('ascii'))
     #def close(self):
@@ -63,25 +65,27 @@ class router_client:
     def connect(self, server_IP, server_port):
         print('c1')
 
-        #self.routerobject.connect((server_IP,server_port))
+        self.routerobject.connect((server_IP,server_port))
+
         self.incoming_msg = self.routerobject.recv(1024)
+        print('c2')
+
         print(self.incoming_msg.decode('ascii'))
         print('c2')
 host1 = socket.gethostname()
 host2 = socket.gethostname()
 host3 = socket.gethostname()
 
-a1 = router_server("IDLE",host1,444) #for test
+a1 = router_server("IDLE",'127.0.0.2',444) #for test
 a2 = router_server("IDLE",host2,556)
 a3 = router_client("IDLE",host3,557)
-a3.connect(a1.ip,a1.port)
 #a3.connect('127.1.1.16','556')
 a1.listen()
 a1.accept()
+a3.connect(a1.ip,a1.port)
+
 a2.listen()
 a2.accept()
-a3.connect(a1.ip,a1.port)
-a3.connect('127.1.1.16','556')
 # this part creates a list of potential useful IPs for simulating 10 different routers
 ip_oct = [i for i in range (2,14)]
 interfacce_list = []
