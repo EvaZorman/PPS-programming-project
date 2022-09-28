@@ -17,9 +17,11 @@ in the headers in binary format.
 4- should you have any question feel free to ask me anytime.
 """
 
-class BGP_Router:
+# The following class creates a server socket (each port can be used as either server or client.
+# no port can be used as both
+class router_server:
     def __init__(self,state,ip,port):
-        self.state = 'IDLE'
+        self.state = state
         self.ip = ip
         self.port = port
         self.routerobject = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -27,58 +29,59 @@ class BGP_Router:
         self.clientsocket = 0
         self.clientaddress = '0.0.0.0' #sample will never be used
         self.incoming_msg = ''
+
     def listen(self):
         self.routerobject.listen(11)
 
     def accept(self):
-	while True:
-        	self.clientsocket, self.clientaddress = self.routerobject.accept()
-        	print('received connection from: ', str(self.clientaddress)+'\r\n')
-        	self.clientsocket.send(message.encode('thank you',encode('ascii'))
-		self.clientsocket.close()
+        while True:
+            self.clientsocket, self.clientaddress = self.routerobject.accept()
+            print('received connection from: ', str(self.clientaddress) + '\r\n')
+            print('s')
+            self.clientsocket.send('thank you'.encode('ascii'))
+            self.clientsocket.close()
+
     #def send(self,message):
         #self.routerobject.send(message.encode('ascii'))
     #def close(self):
         #self.routerobject.close()
-    def connect(self, server_IP, server_port):
-        self.routerobject.connect((server_IP,server_port))
-        self.incoming_msg = self.routerobject.recv(2048)
-    def changestate(self,state):
+
+#------------------------------------------------------------------
+# the following class makes client socket objects
+
+class router_client:
+
+    def __init__(self, state, ip, port):
+        print('a')
         self.state = state
-        if self.incoming_msg == 'NOTIFICATION': #to be completed by SAM
-            if self.state == "CONNECT":
-                self.state = 'ACTIVE'
-                """
-                to be completed by me, AREF
-                """
-            else:
-                self.state = 'IDLE'
-                self.close()
-        elif self.incoming_msg == 'UPDATE': #To be completed by SAM
-            #update table
-            pass
-        elif self.incoming_msg == 'KEEPALIVE':
-            self.state = "ESTABLISHED"
-            #timer =
-        else:
-            self.state = "OPENSENT" #should be improved later
-            #send OPEN msg
-            if self.state == 'CONNECT' or self.state == 'ACTIVE':
-                self.state = "OPENCONFIRM"
-            else:
-                self.state = 'ESTABLISHED'
+        self.ip = ip
+        self.port = port
+        self.routerobject = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.incoming_msg = ''
+        #self.routerobject.connect(('127.1.1.16', 556))
 
+    def connect(self, server_IP, server_port):
+        print('c1')
 
+        #self.routerobject.connect((server_IP,server_port))
+        self.incoming_msg = self.routerobject.recv(1024)
+        print(self.incoming_msg.decode('ascii'))
+        print('c2')
+host1 = socket.gethostname()
+host2 = socket.gethostname()
+host3 = socket.gethostname()
 
-
-a1 = BGP_Router("IDLE",'127.1.1.15',555) #for test
-a2 = BGP_Router("IDLE",'127.1.1.16',556)
-a3 = BGP_Router("IDLE",'127.1.1.17',557)
+a1 = router_server("IDLE",host1,444) #for test
+a2 = router_server("IDLE",host2,556)
+a3 = router_client("IDLE",host3,557)
+a3.connect(a1.ip,a1.port)
+#a3.connect('127.1.1.16','556')
 a1.listen()
-a1.connect()
+a1.accept()
 a2.listen()
-a2.connect()
-a3.connect((a1.ip,a1.port))
+a2.accept()
+a3.connect(a1.ip,a1.port)
+a3.connect('127.1.1.16','556')
 # this part creates a list of potential useful IPs for simulating 10 different routers
 ip_oct = [i for i in range (2,14)]
 interfacce_list = []
