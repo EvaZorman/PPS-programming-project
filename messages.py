@@ -23,6 +23,8 @@ https://www.rfc-editor.org/rfc/rfc4271.html
 """
 import struct
 
+from errors import NotificationMessage
+
 
 class BGPMessage(object):
     buffer_ = ()
@@ -60,22 +62,22 @@ class BGPMessage(object):
     def header(msg_type, msg_body):
         return BGPMessage.marker + struct.pack('!H', BGPMessage.min_length + len(msg_body)) + struct.pack('!B', msg_type) + msg_body
 
-    def extract_header(self, data, msg_len=0, capability={}):
+    def extract_header(self, data, msg_len, capability):
         if msg_len(data) < self.min_length:
-            raise MessageHeaderError()#"msg=Message is less than minimum length") #links up with error file
+            raise NotificationMessage(3, 1)#"msg=Message is less than minimum length") #links up with error file
 
         _marker, _msg_length, msg_type_ = struct.unpack('!16sHB', data[self.min_length])
         if _marker != self.marker:
-            raise NotificationMessage()
+            raise NotificationMessage(0, 1)
 
         if _msg_length < self.min_length or _msg_length >self.max_length:
-            raise BGPnotification() # check message length
+            raise NotificationMessage(0, 2) # Bad Message Length
 
         if len(data) < _msg_length
-            raise MessageHeaderError() # bad message length
+            raise NotificationMessage(0, 2) # bad message length
 
         if msg_type_ not in self.received_message:
-            raise NotificationMessage() #incorrect message type
+            raise NotificationMessage(0, 3) # Bad Message Type
 
         msg_body = data[self.min_length: _msg_length]
         clas = self.received_message[msg_body].extract_header(
@@ -84,14 +86,14 @@ class BGPMessage(object):
             capability = capability)
         return clas
 
-    def pack_msg_header(self, data, capability={}):
+    def pack_msg_header(self, data, capability):
         msg_type = data.get('type')
         if msg_type not in self.received_message:
-            raise BGPnotification()
+            raise NotificationMessage(0, 3) # Bad Message Type
         msg_body = self.received_message[msg_type].pack_msg_header(data=data.get('msg'), capability=capability)
         return self(
-            maker_=data.get('msg'),
-            msg.hex=self.header(msg_type, msg_body, msg_hex)
+            maker_ = data.get('msg'),
+            msg_hex = self.header(msg_type, msg_body.msg_hex)
         )
 
 
@@ -101,9 +103,12 @@ class KeepAliveMessage(BGPMessage):
     TYPE_STR = 'KEEPALIVE'
 
     def extract(cls, data, msg_len, capab):
-        if msg_len(data) != 0
+        if msg_len(data) != 0:
             raise BGPNotificationMessage(1, 2) # will need to throw error
         return cls(self.maker=None, self.msg_length= self.msg_len + BGPMessage.min_length)
+
+
+
 
 
 
