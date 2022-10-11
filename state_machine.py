@@ -8,9 +8,6 @@ according to the BGP protocol.
 import asyncio
 import loguru
 
-"""
-These states functions need to implement
-"""
 from fsm_active import fsm_active
 from fsm_connect import fsm_connect
 from fsm_established import fsm_established
@@ -25,17 +22,27 @@ from timers import (
 )
 
 # from Sams Work import (
-#     close_connection,
 #     send_keepalive_message,
-#     send_notification_message,
 #     send_open_message,
 #     send_update_message,
 # )
 
+# from errors import (
+# notification_message,
+# )
+
+"""
+I saw Aref's Code, set_connection is probably router_listener (Not Sure)
+"""
+
+# from router import (
+# set_connection,
+# close_connection,
+# )
+
 
 class BGPStateMachine:
-    # I'd suggest to use the python-statemachine lib, but do whatever
-    # feels best for you :)
+
     def __init__(self, local_id, local_hold_time, peer_ip):
         """ Class constructor """
 
@@ -50,9 +57,9 @@ class BGPStateMachine:
         self.event_queue = []
         self.event_serial_number = 0
 
-        # self.reader = None
-        # self.writer = None
-        # self.tcp_connection_established = False
+        self.reader = None
+        self.writer = None
+        self.tcp_connection_established = False
 
         self.state = "Idle"
         self.connect_retry_counter = 0
@@ -91,13 +98,7 @@ class BGPStateMachine:
 
         # In case Stop event is being enqueued flush the queue to expedite it
 
-        """
-        Event 2: ManualStop
-        Definition: Should be called when a BGP ManualStop event is requested.
-        Status: Mandatory
-        """
-
-        """ If we implement couple of Mandatory Events then we need it"""
+        """ If we implement Manual Stop and Automatic Stop couple of Mandatory Events then we need it"""
 
         # if event.name in {"Event 2: ManualStop", "Event 8: AutomaticStop"}:
         #     self.event_queue.clear()
