@@ -45,6 +45,6 @@ this will create a new branch on the server with your *commited* work
 
 Make sure you're back on the master branch, and that you pulled all changes before making another new one
 ````
-git checkout master
+git checkout main
 git pull
 ````
