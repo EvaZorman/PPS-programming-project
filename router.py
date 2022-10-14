@@ -23,40 +23,32 @@ in the headers in binary format.
 
 # The following class creates a server socket (each port can be used as either server or client.
 # no port can be used as both
-class RouterServer:
+class RouterListener:
     def __init__(self, name, state, ip, port):
         self.name = name
         self.state = state
         self.ip = ip
         self.port = port
-        self.routerobject = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.routerobject.bind((self.ip, self.port))
-        self.clientsocket = 0
-        self.clientaddress = "0.0.0.0"  # sample will never be used
-        self.incoming_msg = ""
-        self.path_table = {"sample_router_name": ("Network", "Next Hop", "Weight")}
+        self.listen_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.listen_socket.bind((self.ip, self.port))
+        self.path_table = {}
 
-    def listen(self):
-        self.routerobject.listen(11)
-
-        # print('p1')
+    def listen(self, connections=11):
+        self.listen_socket.listen(connections)
 
     def accept(self):
         while True:
-            # print('p2')
-
-            self.clientsocket, self.clientaddress = self.routerobject.accept()
-            print("received connection from: " + str(self.clientaddress) + "\r\n")
-            # print('p3')
-            self.clientsocket.send("connection accepted".encode("ascii"))
-            self.clientsocket.close()
+            client_socket, client_addr = self.listen_socket.accept()
+            print("received connection from: " + str(client_addr) + "\r\n")
+            client_socket.send("connection accepted".encode("ascii"))
+            client_socket.close()
 
 
 #  ------------------------------------------------------------------
 # the following class makes client socket objects
 
 
-class RouterClient:
+class RouterSpeaker:
     def __init__(self, name, state, ip, port):
         # print('a') for debugging
         self.name = name
@@ -67,43 +59,37 @@ class RouterClient:
         self.incoming_msg = ""
 
     def connect(self, server_ip, server_port):
-        # print('c1') for debugging
-
         self.routerobject.connect((server_ip, server_port))
-
         self.incoming_msg = self.routerobject.recv(1024)
-        # print('c2') for debugging
 
         print(self.incoming_msg.decode("ascii"))
-        # print('c3') gor debugging
 
-
-def router_listener():
-    a1_l = RouterServer(
-        "a1", "IDLE", "10.0.2.15", 444
-    )  # a1_l = a1 listener & a1_s = a1 sender
-    a1_l.listen()
-    a1_l.accept()
-
-
-def router_sender():
-    time.sleep(
-        15
-    )  # Will cause an error if deleted. required time for router to become stable.
-    a1_s = RouterClient("a1", "IDLE", "10.0.2.15", 557)
-    a1_s.connect("10.0.2.6", 444)
-
-
-if __name__ == "__main__":
-    Thread(target=router_listener).start()
-    Thread(target=router_sender).start()
-
-# a3.connect(a1.ip,a1.port)
-
-# a2.listen()
-# a2.accept()
-# this part creates a list of potential useful IPs for simulating 10 different routers
-ip_oct = [i for i in range(2, 14)]
-interfacce_list = []
-for i in ip_oct:
-    interfacce_list.append("127.0.0." + str(i))
+# def router_listener():
+#     a1_l = RouterServer(
+#         "a1", "IDLE", "10.0.2.15", 444
+#     )  # a1_l = a1 listener & a1_s = a1 sender
+#     a1_l.listen()
+#     a1_l.accept()
+#
+#
+# def router_sender():
+#     time.sleep(
+#         15
+#     )  # Will cause an error if deleted. required time for router to become stable.
+#     a1_s = RouterClient("a1", "IDLE", "10.0.2.15", 557)
+#     a1_s.connect("10.0.2.6", 444)
+#
+#
+# if __name__ == "__main__":
+#     Thread(target=router_listener).start()
+#     Thread(target=router_sender).start()
+#
+# # a3.connect(a1.ip,a1.port)
+#
+# # a2.listen()
+# # a2.accept()
+# # this part creates a list of potential useful IPs for simulating 10 different routers
+# ip_oct = [i for i in range(2, 14)]
+# interfacce_list = []
+# for i in ip_oct:
+#     interfacce_list.append("127.0.0." + str(i))

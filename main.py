@@ -48,9 +48,9 @@ def main():
     )
 
     as_data = setup_as_routers(args.as_number)
-    generate_routing_paths(args.as_number, as_data)
+    routes = generate_routing_paths(args.as_number, as_data)
 
-    setup_simulation()
+    setup_simulation(routes)
 
 
 if __name__ == "__main__":

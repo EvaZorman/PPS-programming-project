@@ -7,6 +7,7 @@ according to the BGP protocol.
 """
 import asyncio
 import loguru
+from enum import Enum
 
 from fsm_active import fsm_active
 from fsm_connect import fsm_connect
@@ -31,14 +32,14 @@ from timers import (
 # notification_message,
 # )
 
-"""
-I saw Aref's Code, set_connection is probably router_listener (Not Sure)
-"""
 
-# from router import (
-# set_connection,
-# close_connection,
-# )
+class State(Enum):
+    IDLE = 1
+    CONNECT = 2
+    ACTIVE = 3
+    OPEN_SENT = 4
+    OPEN_CONFIRM = 5
+    ESTABLISHED = 6
 
 
 class BGPStateMachine:
@@ -60,7 +61,7 @@ class BGPStateMachine:
         self.writer = None
         self.tcp_connection_established = False
 
-        self.state = "Idle"
+        self.state = State.IDLE
         self.connect_retry_counter = 0
         self.connect_retry_timer = 0
         self.connect_retry_time = 5
@@ -76,18 +77,18 @@ class BGPStateMachine:
         self.connect_retry_time = 5
 
         self.task_fsm = asyncio.create_task(self.fsm())
-        self.task_decrease_hold_timer = asyncio.create_task(self.decrease_hold_timer())
+        self.task_decrease_hold_timer = asyncio.create_task(decrease_hold_timer(self))
         self.task_decrease_connect_retry_timer = asyncio.create_task(
-            self.decrease_connect_retry_timer()
+            decrease_connect_retry_timer(self)
         )
         self.task_decrease_keepalive_timer = asyncio.create_task(
-            self.decrease_keepalive_timer()
+            decrease_keepalive_timer(self)
         )
 
     def __del__(self):
         """Class destructor"""
 
-        self.close_connection()
+        # self.close_connection() should be done by the router
         self.task_fsm.cancel()
         self.task_decrease_hold_timer.cancel()
         self.task_decrease_connect_retry_timer.cancel()
@@ -98,8 +99,7 @@ class BGPStateMachine:
 
         # Add serial number to event for ease of debugging
         self.event_serial_number += 1
-
-        event.serial_number = self.event_serial_number
+        event.set_event_serial_num(self.event_serial_number)
 
         # In case Stop event is being enqueued flush the queue to expedite it
 
@@ -109,9 +109,8 @@ class BGPStateMachine:
         #     self.event_queue.clear()
 
         self.event_queue.append(event)
-
         self.logger.opt(ansi=True, depth=1).debug(
-            f"<cyan>[ENQ]</cyan> {event.name} [#{event.serial_number}]"
+            f"<cyan>[ENQ]</cyan> {event.get_name()} [#{event.get_serial_num()}]"
         )
 
     def dequeue_event(self):
@@ -119,21 +118,14 @@ class BGPStateMachine:
 
         event = self.event_queue.pop(0)
         self.logger.opt(ansi=True, depth=1).debug(
-            f"<cyan>[DEQ]</cyan> {event.name} [#{event.serial_number}]"
+            f"<cyan>[DEQ]</cyan> {event.get_name()} [#{event.get_serial_num()}]"
         )
         return event
 
     def change_state(self, state):
         """Change FSM state"""
 
-        assert state in {
-            "Idle",
-            "Connect",
-            "Active",
-            "OpenSent",
-            "OpenConfirm",
-            "Established",
-        }
+        assert state in State
 
         self.logger.opt(depth=1).info(f"State: {self.state} -> {state}")
         self.state = state
@@ -142,12 +134,12 @@ class BGPStateMachine:
             peer=f"{self.peer_ip}:{self.peer_port}", state=self.state
         )
 
-        if self.state == "Idle":
+        if self.state == State.IDLE:
             self.connect_retry_timer = 0
             self.keepalive_timer = 0
             self.hold_timer = 0
             self.peer_port = 0
-            self.close_connection()
+            # self.close_connection() this should probably be done by the router and not by the fsm
 
     async def fsm(self):
         """Finite State Machine loop"""
@@ -156,22 +148,22 @@ class BGPStateMachine:
             if self.event_queue:
                 event = self.dequeue_event()
 
-                if self.state == "Idle":
-                    await self.fsm_idle(event)
+                if self.state == State.IDLE:
+                    await fsm_idle(self, event)
 
-                if self.state == "Connect":
-                    await self.fsm_connect(event)
+                if self.state == State.CONNECT:
+                    await fsm_connect(self, event)
 
-                if self.state == "Active":
-                    await self.fsm_active(event)
+                if self.state == State.ACTIVE:
+                    await fsm_active(self, event)
 
-                if self.state == "OpenSent":
-                    await self.fsm_opensent(event)
+                if self.state == State.OPEN_SENT:
+                    await fsm_opensent(self, event)
 
-                if self.state == "OpenConfirm":
-                    await self.fsm_openconfirm(event)
+                if self.state == State.OPEN_CONFIRM:
+                    await fsm_openconfirm(self, event)
 
-                if self.state == "Established":
-                    await self.fsm_established(event)
+                if self.state == State.ESTABLISHED:
+                    await fsm_established(self, event)
 
             await asyncio.sleep(0.1)

@@ -22,8 +22,16 @@ https://www.rfc-editor.org/rfc/rfc4271.html
 
 """
 import struct
+from enum import Enum
 
 from errors import NotificationMessage
+
+
+class Message(Enum):
+    OPEN = 1,
+    UPDATE = 2,
+    NOTIFICATION = 3,
+    KEEPALIVE = 4
 
 
 class BGPMessage():
@@ -32,12 +40,7 @@ class BGPMessage():
     min_length = 19
     max_length = 4096
     received_message = {}
-    TYPE = None
-    # will be clearing below since they are declared in their respective classes
-    OPEN = 1
-    UPDATE = 2
-    NOTIFICATION = 3
-    KEEPALIVE = 4
+    message_type = None
 
     def __init__(self, maker_, msg_hex=None, msg_length=None):
         self.maker = maker_
@@ -58,15 +61,14 @@ class BGPMessage():
         return clas
 
     def dict(self):
-        return {"type": self.TYPE, "msg": self.maker}
+        return {"type": self.message_type, "msg": self.maker}
 
-    @staticmethod
-    def header(msg_type, msg_body):
+    def header(self, msg_type, msg_body):
         return (
-            BGPMessage.marker
-            + struct.pack("!H", BGPMessage.min_length + len(msg_body))
-            + struct.pack("!B", msg_type)
-            + msg_body
+                BGPMessage.marker
+                + struct.pack("!H", self.min_length + len(msg_body))
+                + struct.pack("!B", msg_type)
+                + msg_body
         )
 
     def extract_header(self, data, msg_len, capability):
@@ -87,7 +89,7 @@ class BGPMessage():
         if msg_type_ not in self.received_message:
             raise NotificationMessage(0, 3)  # Bad Message Type
 
-        msg_body = data[self.min_length : _msg_length]
+        msg_body = data[self.min_length: _msg_length]
         clas = self.received_message[msg_body].extract_header(
             data=msg_body, _msg_length=msg_len, capability=capability
         )
@@ -100,7 +102,6 @@ class BGPMessage():
         msg_body = self.received_message[msg_type].pack_msg_header(
             data=data.get("msg"), capability=capability
         )
-        # TODO fix this
         return BGPMessage(
             maker_=data.get("msg"), msg_hex=self.header(msg_type, msg_body.msg_hex)
         )
@@ -189,10 +190,12 @@ class UpdateMessage(BGPMessage):
 
 
 class KeepAliveMessage(BGPMessage):
-    TYPE = 4
-    TYPE_STR = "KEEPALIVE"
+    def __init__(self, maker_):
+        super().__init__(maker_)
+        self.message_type = Message.NOTIFICATION
 
-    def extract(self, data, msg_len, capab=None):
+    @staticmethod
+    def extract(data, msg_len, capab=None):
         if msg_len(data) != 0:
             raise NotificationMessage(1, 2)  # will need to throw error
         return BGPMessage(None, msg_length=msg_len + BGPMessage.min_length)

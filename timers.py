@@ -1,52 +1,52 @@
 import asyncio
 
 
-async def decrease_connect_retry_timer(self):
+async def decrease_connect_retry_timer(cls):
     """Decrease connect_retry_timer every second if its value is greater than zero"""
 
-    self.logger.debug("Starting decrease_connect_retry_timer() coroutine")
+    cls.logger.debug("Starting decrease_connect_retry_timer() coroutine")
 
-    if not hasattr(self, "connect_retry_timer"):
-        self.connect_retry_timer = 0
+    if not hasattr(cls, "connect_retry_timer"):
+        cls.connect_retry_timer = 0
 
     while True:
         await asyncio.sleep(1)
-        if self.connect_retry_timer:
-            self.logger.debug(f"connect_retry_timer = {self.connect_retry_timer}")
-            self.connect_retry_timer -= 1
-            if not self.connect_retry_timer:
-                self.enqueue_event("ConnectRetryTimer_Expires")
+        if cls.connect_retry_timer:
+            cls.logger.debug(f"connect_retry_timer = {cls.connect_retry_timer}")
+            cls.connect_retry_timer -= 1
+            if not cls.connect_retry_timer:
+                cls.enqueue_event("ConnectRetryTimer_Expires")
 
 
-async def decrease_hold_timer(self):
+async def decrease_hold_timer(cls):
     """Decrease hold_timer every second if its value is greater than zero"""
 
-    self.logger.debug("Starting decrease_hold_timer() coroutine")
+    cls.logger.debug("Starting decrease_hold_timer() coroutine")
 
-    if not hasattr(self, "hold_timer"):
-        self.hold_timer = 0
+    if not hasattr(cls, "hold_timer"):
+        cls.hold_timer = 0
 
     while True:
         await asyncio.sleep(1)
-        if self.hold_timer:
-            self.logger.debug(f"hold_timer = {self.hold_timer}")
-            self.hold_timer -= 1
-            if not self.hold_timer:
-                self.enqueue_event("HoldTimer_Expires")
+        if cls.hold_timer:
+            cls.logger.debug(f"hold_timer = {cls.hold_timer}")
+            cls.hold_timer -= 1
+            if not cls.hold_timer:
+                cls.enqueue_event("HoldTimer_Expires")
 
 
-async def decrease_keepalive_timer(self):
+async def decrease_keepalive_timer(cls):
     """Decrease keepalive_timer every second if its value is greater than zero"""
 
-    self.logger.debug("Starting decrease_keepalive_timer() coroutine")
+    cls.logger.debug("Starting decrease_keepalive_timer() coroutine")
 
-    if not hasattr(self, "keepalive_timer"):
-        self.keepalive_timer = 0
+    if not hasattr(cls, "keepalive_timer"):
+        cls.keepalive_timer = 0
 
     while True:
         await asyncio.sleep(1)
-        if self.keepalive_timer:
-            self.logger.debug(f"keepalive_timer = {self.keepalive_timer}")
-            self.keepalive_timer -= 1
-            if not self.keepalive_timer:
-                self.enqueue_event("KeepaliveTimer_Expires")
+        if cls.keepalive_timer:
+            cls.logger.debug(f"keepalive_timer = {cls.keepalive_timer}")
+            cls.keepalive_timer -= 1
+            if not cls.keepalive_timer:
+                cls.enqueue_event("KeepaliveTimer_Expires")

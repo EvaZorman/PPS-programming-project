@@ -26,15 +26,15 @@ import struct
 
 from messages import (
     BGPMessage,
-    NotificationMessage
+    NotificationMessage, Message
 )
 
 
 class OpenMessage(BGPMessage):
-    TYPE = 1
-    TYPE_STR = "OPEN message"
-
-    VERSION = 4
+    def __init__(self, maker_):
+        super().__init__(maker_)
+        self.message_type = Message.OPEN
+        self.version = 4
 
     def extract_header(self, data, msg_len, capability):
         open_msg = {}
@@ -49,7 +49,7 @@ class OpenMessage(BGPMessage):
         except Exception as ex:
             raise NotificationMessage(0, 2) from ex  # Bad Message Length
 
-        if open_msg["version"] != self.VERSION:
+        if open_msg["version"] != self.version:
             raise NotificationMessage(1, 1)  # Unsupported Version Number
 
         if open_msg["as_num"] == 0:

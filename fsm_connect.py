@@ -1,43 +1,43 @@
-import asyncio
-
 import loguru
 
+from state_machine import State
 
-async def fsm_connect(self, event):
+
+async def fsm_connect(cls, event):
     """Connect state"""
     """
         Event 2: ManualStop
         Definition: Should be called when a BGP ManualStop event is requested.
         Status: Mandatory
         """
-
-    if event.name == "Event 2: ManualStop":
-        self.logger.info(event.name)
+    if event.get_name() == "Event 2: ManualStop":
+        cls.logger.info(event.get_name())
 
         # Set ConnectRetryCounter to zero
-        self.connect_retry_counter = 0
+        cls.connect_retry_counter = 0
 
         # Change state to Idle
-        self.change_state("Idle")
+        cls.change_state(State.IDLE)
 
     """
     Event 9: ConnectRetryTimer_Expires
     Definition: Called when the ConnectRetryTimer expires.
     Status: Mandatory
     """
-
-    if event.name == "Event 9: ConnectRetryTimer_Expires":
-        self.logger.info(event.name)
+    if event.get_name() == "Event 9: ConnectRetryTimer_Expires":
+        cls.logger.info(event.get_name())
 
         # Restart the ConnectRetryTimer
-        self.connect_retry_timer = self.connect_retry_time
+        cls.connect_retry_timer = cls.connect_retry_time
 
         # Initiate a TCP connection to the other BGP peer
-        self.task_set_connection = asyncio.create_task(self.set_connection())
-        await asyncio.sleep(0.001)
+        # this is again router stuff
+
+        # cls.task_set_connection = asyncio.create_task(cls.set_connection())
+        # await asyncio.sleep(0.001)
 
         # Restart the ConnectRetryTimer
-        self.connect_retry_timer = self.connect_retry_time
+        cls.connect_retry_timer = cls.connect_retry_time
 
     """
     Event 16: Tcp_CR_Acked
@@ -46,35 +46,34 @@ async def fsm_connect(self, event):
                 established with the peer.
     Status: Mandatory
     """
-
-    if event.name in {"Event 16: Tcp_CR_Acked", "Event 17: TcpConnectionConfirmed"}:
+    if event.get_name() in {"Event 16: Tcp_CR_Acked", "Event 17: TcpConnectionConfirmed"}:
         # Take an ownership of the connection
-        self.reader = event.reader
-        self.writer = event.writer
-        self.peer_ip = event.peer_ip
-        self.peer_port = event.peer_port
-        self.tcp_connection_established = True
+        cls.reader = event.get_reader()
+        cls.writer = event.get_writer()
+        cls.peer_ip = event.get_peer_ip()
+        cls.peer_port = event.get_peer_port()
+        cls.tcp_connection_established = True
 
-        self.logger = loguru.logger.bind(
-            peer=f"{self.mode} {self.peer_ip}:{self.peer_port}", state=self.state
+        cls.logger = loguru.logger.bind(
+            peer=f"{cls.mode} {cls.peer_ip}:{cls.peer_port}", state=cls.state
         )
 
-        self.logger.info(event.name)
+        cls.logger.info(event.get_name())
 
         # Stop the ConnectRetryTimer and set the ConnectRetryTimer to zero
-        self.connect_retry_timer = 0
+        cls.connect_retry_timer = 0
 
         # Send an open message to the peer
-        await self.send_open_message()
+        await cls.send_open_message()
 
         # Set the hold_timer to a large value, hold_timer value of 4 minutes is suggested
-        self.hold_timer = 240
+        cls.hold_timer = 240
 
         # Changes state to OpenSent
-        self.change_state("OpenSent")
+        cls.change_state(State.OPEN_SENT)
 
     else:
         # Increment the ConnectRetryCounter by 1
-        self.connect_retry_counter += 1
+        cls.connect_retry_counter += 1
 
-        self.change_state("Idle")
+        cls.change_state(State.IDLE)

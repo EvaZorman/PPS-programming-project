@@ -129,7 +129,7 @@ def setup_as_routers(as_num):
     return as_paths
 
 
-def setup_simulation():
+def setup_simulation(routes):
     """
     Handles the simulation process and the creation of necessary objects.
     """

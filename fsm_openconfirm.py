@@ -1,20 +1,18 @@
-# import messages
 from errors import FiniteStateMachineError
+from state_machine import State
 
-# From Sam
 
-
-async def fsm_openconfirm(self, event):
+async def fsm_openconfirm(cls, event):
     """Openconfirm state"""
 
-    if event.name == "Event 11: KeepaliveTimer_Expires":
-        self.logger.info(event.name)
+    if event.get_name() == "Event 11: KeepaliveTimer_Expires":
+        cls.logger.info(event.get_name())
 
         # Send KEEPALIVE message
-        await self.send_keepalive_message()
+        await cls.send_keepalive_message()
 
         # Restart the KeepaliveTimer
-        self.keepalive_timer = self.keepalive_time
+        cls.keepalive_timer = cls.keepalive_time
 
     """
     Event 18: TcpConnectionFails
@@ -22,32 +20,32 @@ async def fsm_openconfirm(self, event):
                 or was lost.
     Status: Mandatory
     """
-
-    if event.name == "Event 18: TcpConnectionFails":
-        self.logger.info(event.name)
+    if event.get_name() == "Event 18: TcpConnectionFails":
+        cls.logger.info(event.get_name())
 
         # Increment the ConnectRetryCounter by 1
-        self.connect_retry_counter += 1
+        cls.connect_retry_counter += 1
 
         # Change state to Idle
-        self.change_state("Idle")
+        cls.change_state(State.IDLE)
 
-    if event.name in {"Event 21: BGPHeaderErr", "Event 22: BGPOpenMsgErr"}:
-        self.logger.info(event.name)
+    if event.get_name() in {"Event 21: BGPHeaderErr", "Event 22: BGPOpenMsgErr"}:
+        cls.logger.info(event.get_name())
 
         # From Sam
+        # TODO ?
         message = event.errors
 
         # Send a NOTIFICATION message with the appropriate error code
-        await self.notification_message(
+        await cls.notification_message(
             message.message_error_code, message.message_error_subcode
         )
 
         # Increment ConnectRetryCounter
-        self.connect_retry_counter += 1
+        cls.connect_retry_counter += 1
 
         # Change state to Idle
-        self.change_state("Idle")
+        cls.change_state(State.IDLE)
 
     """
     Event 26: KeepAliveMsg
@@ -55,22 +53,20 @@ async def fsm_openconfirm(self, event):
                 was received from the peer.
     Status: Mandatory
     """
-
-    if event.name == "Event 26: KeepAliveMsg":
-        self.logger.info(event.name)
+    if event.get_name() == "Event 26: KeepAliveMsg":
+        cls.logger.info(event.get_name())
 
         # Restart the HoldTimer
-        self.hold_timer = self.hold_time
+        cls.hold_timer = cls.hold_time
 
         # Change state to Established
-        self.change_state("Established")
+        cls.change_state(State.ESTABLISHED)
 
     else:
-
         # Send the NOTIFICATION with the Error Code Finite State Machine Error
-        await self.notification_message(FiniteStateMachineError)
+        await cls.notification_message(FiniteStateMachineError)
 
         # Increment the ConnectRetryCounter by 1
-        self.connect_retry_counter += 1
+        cls.connect_retry_counter += 1
 
-        self.change_state("Idle")
+        cls.change_state(State.IDLE)
