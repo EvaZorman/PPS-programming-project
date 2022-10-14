@@ -1,6 +1,9 @@
 import socket
 from threading import Thread
 import time
+
+from state_machine import BGPStateMachine
+
 """
 use class BGP_router to create router objects.
 
@@ -23,15 +26,29 @@ in the headers in binary format.
 
 # The following class creates a server socket (each port can be used as either server or client.
 # no port can be used as both
-class RouterListener:
-    def __init__(self, name, state, ip, port):
+class Router:
+    def __init__(self, name, ip, discovered_paths):
         self.name = name
-        self.state = state
         self.ip = ip
+        # self.sm = BGPStateMachine()
+        self.paths = discovered_paths
+        self.path_table = {}
+
+        # BGP receiving and listening sockets
+        self.speaker = RouterSpeaker()
+        self.listener = RouterListener()
+
+    def generate_routing_table(self, paths):
+        if not self.path_table:
+
+
+
+
+class RouterListener:
+    def __init__(self, port=None):
         self.port = port
         self.listen_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.listen_socket.bind((self.ip, self.port))
-        self.path_table = {}
+        self.listen_socket.bind((socket.gethostname(), port))
 
     def listen(self, connections=11):
         self.listen_socket.listen(connections)
@@ -44,25 +61,17 @@ class RouterListener:
             client_socket.close()
 
 
-#  ------------------------------------------------------------------
-# the following class makes client socket objects
-
-
 class RouterSpeaker:
-    def __init__(self, name, state, ip, port):
-        # print('a') for debugging
-        self.name = name
-        self.state = state
-        self.ip = ip
+    def __init__(self, port=None):
         self.port = port
-        self.routerobject = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.incoming_msg = ""
+        self.speaker_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-    def connect(self, server_ip, server_port):
-        self.routerobject.connect((server_ip, server_port))
-        self.incoming_msg = self.routerobject.recv(1024)
+    def connect(self, server_port):
+        self.speaker_socket.connect((socket.gethostname(), server_port))
+        incoming_msg = self.speaker_socket.recv(1024)
 
-        print(self.incoming_msg.decode("ascii"))
+        print(incoming_msg.decode("ascii"))
+
 
 # def router_listener():
 #     a1_l = RouterServer(

@@ -43,6 +43,12 @@ class State(Enum):
 
 
 class BGPStateMachine:
+    """
+    TODO Q: this is constructed in a way that we should only create a SM once we have a connection to another peer
+
+    I was under the impression each router would need its own state machine that isn't necessarily connected to
+    a peer. With this, we can't just create a router and assign a SM to it.
+    """
     def __init__(self, local_id, local_hold_time, peer_ip):
         """Class constructor"""
 
