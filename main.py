@@ -14,7 +14,7 @@ import argparse
 
 from simulation import (
     generate_routing_paths,
-    setup_as_routers,
+    setup_as,
     setup_simulation,
 )
 
@@ -47,7 +47,7 @@ def main():
         f"\t Number of AS's: {args.as_number}\n".expandtabs(2)
     )
 
-    as_data = setup_as_routers(args.as_number)
+    as_data = setup_as(args.as_number)
     routes = generate_routing_paths(args.as_number, as_data)
 
     setup_simulation(routes)

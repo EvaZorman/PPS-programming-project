@@ -4,6 +4,10 @@ has been set up.
 """
 import random
 from collections import defaultdict
+from pprint import pprint
+from threading import Thread
+
+from router import Router
 
 
 def generate_routing_paths(as_num, as_paths):
@@ -56,7 +60,7 @@ def print_path_table(as_dict):
     print()
 
 
-def setup_as_routers(as_num):
+def setup_as(as_num):
     """
     Polls the user for any specific routes they might wish for.
     """
@@ -133,3 +137,30 @@ def setup_simulation(routes):
     """
     Handles the simulation process and the creation of necessary objects.
     """
+    pprint(routes)
+    router_list = []
+
+    for as_choice, paths in routes.items():
+        router_num = as_choice.strip("AS")
+        router_list.append(Router(
+            f"R{router_num}",
+            f"123.14.15.{router_num}",
+            int(router_num),
+            paths
+        ))
+
+    listener_threads = start_listeners(router_list)
+
+    print("here we are")
+
+
+def start_listeners(router_list):
+    thread_list = []
+    for i in router_list:
+        thread_list.append(Thread(target=i.listen).start())
+
+    return thread_list
+
+
+def start_speakers():
+    pass
