@@ -76,4 +76,11 @@ class NotificationMessage(BGPMessage, Exception):
 
 # TODO fix this
 class FiniteStateMachineError:
-    print("BIG BIG ERROR")
+    # BGP Finite State
+    #    Machine Error
+    error_code = {
+        0: "Unspecified Error",
+        1: "Receive Unexpected Message in OpenSent State",
+        2: "Receive Unexpected Message in OpenSent State",
+        3: "Receive Unexpected Message in Established State"
+    }
