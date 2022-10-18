@@ -1,4 +1,5 @@
 import socket
+import threading
 from threading import Thread
 import time
 
@@ -51,6 +52,9 @@ class Router:
         self.listener.listen()
         self.listener.accept()
 
+    def stop(self):
+        self.listener.stop()
+
     def update_routing_table(self, data):
         # test data
         self.path_table.append(
@@ -83,29 +87,35 @@ class RouterListener:
         print("Created a RouterListener!")
         self.bgp_port = bgp_port
         self.data_port = data_port
-        # BGP control plane data listener
+        # BGP control plane listener
         self.listen_bgp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.listen_bgp_socket.bind((socket.gethostname(), bgp_port))
         # Data plane listener
         self.listen_data_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.listen_data_socket.bind((socket.gethostname(), data_port))
+        self.stop_listening = threading.Event()
 
     def listen(self, connections=11):
         self.listen_bgp_socket.listen(connections)
         self.listen_data_socket.listen(connections)
 
     def accept(self):
-        while True:
+        while not self.stop_listening.is_set():
             bgp_client_socket, bgp_client_addr = self.listen_bgp_socket.accept()
             data_client_socket, data_client_addr = self.listen_data_socket.accept()
+
             if bgp_client_addr:
                 print("received connection from: " + str(bgp_client_addr) + "\r\n")
                 bgp_client_socket.send("connection accepted".encode("ascii"))
                 bgp_client_socket.close()
+
             if data_client_addr:
                 print("received connection from: " + str(data_client_addr) + "\r\n")
                 data_client_socket.send("connection accepted".encode("ascii"))
                 data_client_socket.close()
+
+    def stop(self):
+        self.stop_listening.set()
 
 
 class RouterSpeaker:

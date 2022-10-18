@@ -3,6 +3,7 @@ Handle the processing of the simulations after the environment
 has been set up.
 """
 import random
+import sys
 from collections import defaultdict
 from pprint import pprint
 from threading import Thread
@@ -153,13 +154,33 @@ def setup_simulation(routes):
 
     print("here we are")
 
+    stop_listeners(task_list=listener_threads, router_list=router_list)
+    sys.exit()
+
 
 def start_listeners(router_list):
+    """
+    Starts BGP listeners in the background by multi-threading.
+    """
     thread_list = []
     for i in router_list:
-        thread_list.append(Thread(target=i.listen).start())
+        t = Thread(target=i.listen)
+        thread_list.append(t)
+        t.daemon = True
+        t.start()
 
     return thread_list
+
+
+def stop_listeners(task_list, router_list):
+    """
+    Stops BGP listeners and the background threads.
+    """
+    for router in router_list:
+        router.stop()
+
+    for t in task_list:
+        t.join(2)
 
 
 def start_speakers():

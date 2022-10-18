@@ -100,6 +100,7 @@ class BGPStateMachine:
         self.task_decrease_connect_retry_timer.cancel()
         self.task_decrease_keepalive_timer.cancel()
 
+    # TODO who creates events? we're just passing strings to this method
     def enqueue_event(self, event):
         """Add new event to the event queue"""
 
