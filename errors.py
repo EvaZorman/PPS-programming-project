@@ -17,7 +17,7 @@ import struct
 from messages import BGPMessage
 
 
-class NotificationMessage(BGPMessage):
+class NotificationMessage(BGPMessage, Exception):
     TYPE = 3
     TYPE_STR = 'Notification'
 
@@ -56,7 +56,10 @@ class NotificationMessage(BGPMessage):
         (2, 8): "Optional Attribute Error",
         (2, 9): "Invalid Network Field",
         (2, 10): "Invalid Network Field",
-        (2, 11): "Malformed AS_PATH"
+        (2, 11): "Malformed AS_PATH",
+
+        # uncompleted message errors
+        (3, 1): "The message is uncompleted or the rest hasn't arrived yet"
 
     }
 
