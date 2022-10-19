@@ -143,14 +143,23 @@ def setup_simulation(routes):
 
     for as_choice, paths in routes.items():
         router_num = as_choice.strip("AS")
-        router_list.append(Router(
-            f"R{router_num}",
-            f"123.14.15.{router_num}",
-            int(router_num),
-            paths
-        ))
+        router_list.append(
+            Router(
+                f"R{router_num}",
+                f"100.{router_num}.0.1",
+                int(router_num),
+                paths
+            )
+        )
 
+    # start the control and data plane listener that will run as long as the
+    # main program is running, unless if we explicitly end them
     listener_threads = start_listeners(router_list)
+
+    # setup the TCP connections for each router based on their routes
+    router_paths = list(routes.values())
+    for router in router_list:
+        router.initiate_connections(router_paths[router_list.index(router)])
 
     print("here we are")
 
@@ -163,8 +172,8 @@ def start_listeners(router_list):
     Starts BGP listeners in the background by multi-threading.
     """
     thread_list = []
-    for i in router_list:
-        t = Thread(target=i.listen)
+    for r in router_list:
+        t = Thread(target=r.start)
         thread_list.append(t)
         t.daemon = True
         t.start()

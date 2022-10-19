@@ -1,9 +1,10 @@
 import socket
 import threading
-from threading import Thread
-import time
 
 import pandas
+
+from events import Event
+from state_machine import BGPStateMachine
 
 """
 use class BGP_router to create router objects.
@@ -31,13 +32,14 @@ class Router:
     def __init__(self, name, ip, router_number, discovered_paths):
         self.name = name
         self.ip = ip
-        # self.sm = BGPStateMachine()
-        self.paths = discovered_paths # TODO this needs to be actually implemented
+        self.sm = BGPStateMachine(f"SM-{name}", 5, discovered_paths)
+
+        self.paths = discovered_paths  # TODO this needs to be actually implemented
         self.path_table = []
 
         # BGP receiving and listening sockets
         """
-        TODO this is ugly... port range will for now always be the router num
+        This is ugly... port range will for now always be the router num
         multiplied by 4 (since we need 4 ports), in the range of:
             port: bgp_listener
             port + 1: bgp_speaker
@@ -45,10 +47,12 @@ class Router:
             port + 3: data_speaker
         """
         port = 2000 + (4 * router_number)
-        self.listener = RouterListener(port, port+2)
-        self.speaker = RouterSpeaker(port+1, port+3)
+        self.listener = RouterListener(self.name, port, port + 2)
+        self.speaker = RouterSpeaker(self.name, port + 1, port + 3)
 
-    def listen(self):
+    def start(self):
+        # switch the sm to Connect state
+        self.sm.switch_state(Event("ManualStart"))
         self.listener.listen()
         self.listener.accept()
 
@@ -81,19 +85,22 @@ class Router:
         print("calculating...")
         pass
 
+    def initiate_connections(self, routes):
+        for r in routes:
+            self.speaker.bgp_connect(
+                # TODO waiting on Open Message :D
+            )
+
 
 class RouterListener:
-    def __init__(self, bgp_port, data_port):
-        print("Created a RouterListener!")
+    def __init__(self, name, bgp_port, data_port):
+        self.name = name
         self.bgp_port = bgp_port
         self.data_port = data_port
-        # BGP control plane listener
-        self.listen_bgp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.listen_bgp_socket.bind((socket.gethostname(), bgp_port))
-        # Data plane listener
-        self.listen_data_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.listen_data_socket.bind((socket.gethostname(), data_port))
         self.stop_listening = threading.Event()
+        # Control and Data plane listener
+        self.listen_bgp_socket = socket.create_server((socket.gethostname(), bgp_port))
+        self.listen_data_socket = socket.create_server((socket.gethostname(), data_port))
 
     def listen(self, connections=11):
         self.listen_bgp_socket.listen(connections)
@@ -104,12 +111,14 @@ class RouterListener:
             bgp_client_socket, bgp_client_addr = self.listen_bgp_socket.accept()
             data_client_socket, data_client_addr = self.listen_data_socket.accept()
 
-            if bgp_client_addr:
+            if bgp_client_socket:
+                # do something based on the data received
                 print("received connection from: " + str(bgp_client_addr) + "\r\n")
                 bgp_client_socket.send("connection accepted".encode("ascii"))
                 bgp_client_socket.close()
 
-            if data_client_addr:
+            if data_client_socket:
+                # check where to pass it to
                 print("received connection from: " + str(data_client_addr) + "\r\n")
                 data_client_socket.send("connection accepted".encode("ascii"))
                 data_client_socket.close()
@@ -119,19 +128,23 @@ class RouterListener:
 
 
 class RouterSpeaker:
-    def __init__(self, bgp_port, data_port):
-        print("Created a RouterSpeaker!")
+    def __init__(self, name, bgp_port, data_port):
+        self.name = name
         self.bgp_port = bgp_port
         self.data_port = data_port
         # BGP control plane data speaker
         self.speaker_bgp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.speaker_bgp_socket.bind((socket.gethostname(), bgp_port))
+        # self.speaker_bgp_socket.bind((socket.gethostname(), bgp_port))
         # Data plane speaker
         self.speaker_data_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.speaker_data_socket.bind((socket.gethostname(), data_port))
+        # self.speaker_data_socket.bind((socket.gethostname(), data_port))
 
-    def bgp_connect(self, server_port):
-        self.speaker_bgp_socket.connect((socket.gethostname(), server_port))
+    def bgp_connect(self, listener_port):
+        self.speaker_bgp_socket.connect((socket.gethostname(), listener_port))
+        self.speaker_bgp_socket.send(
+            # TODO once we have an open message, we can send it :D
+        )
+
         incoming_msg = self.speaker_bgp_socket.recv(1024)
 
         print(incoming_msg.decode("ascii"))
@@ -141,34 +154,3 @@ class RouterSpeaker:
         incoming_msg = self.speaker_data_socket.recv(1024)
 
         print(incoming_msg.decode("ascii"))
-
-
-# def router_listener():
-#     a1_l = RouterServer(
-#         "a1", "IDLE", "10.0.2.15", 444
-#     )  # a1_l = a1 listener & a1_s = a1 sender
-#     a1_l.listen()
-#     a1_l.accept()
-#
-#
-# def router_sender():
-#     time.sleep(
-#         15
-#     )  # Will cause an error if deleted. required time for router to become stable.
-#     a1_s = RouterClient("a1", "IDLE", "10.0.2.15", 557)
-#     a1_s.connect("10.0.2.6", 444)
-#
-#
-# if __name__ == "__main__":
-#     Thread(target=router_listener).start()
-#     Thread(target=router_sender).start()
-#
-# # a3.connect(a1.ip,a1.port)
-#
-# # a2.listen()
-# # a2.accept()
-# # this part creates a list of potential useful IPs for simulating 10 different routers
-# ip_oct = [i for i in range(2, 14)]
-# interfacce_list = []
-# for i in ip_oct:
-#     interfacce_list.append("127.0.0." + str(i))

@@ -24,10 +24,7 @@ https://www.rfc-editor.org/rfc/rfc4271.html
 """
 import struct
 
-from messages import (
-    BGPMessage,
-    NotificationMessage, Message
-)
+from messages import BGPMessage, NotificationMessage, Message
 
 
 class OpenMessage(BGPMessage):

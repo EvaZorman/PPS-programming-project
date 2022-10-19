@@ -46,7 +46,10 @@ async def fsm_connect(cls, event):
                 established with the peer.
     Status: Mandatory
     """
-    if event.get_name() in {"Event 16: Tcp_CR_Acked", "Event 17: TcpConnectionConfirmed"}:
+    if event.get_name() in {
+        "Event 16: Tcp_CR_Acked",
+        "Event 17: TcpConnectionConfirmed",
+    }:
         # Take an ownership of the connection
         cls.reader = event.get_reader()
         cls.writer = event.get_writer()

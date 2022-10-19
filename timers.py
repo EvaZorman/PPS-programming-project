@@ -32,6 +32,7 @@ async def decrease_hold_timer(cls):
             cls.logger.debug(f"hold_timer = {cls.hold_timer}")
             cls.hold_timer -= 1
             if not cls.hold_timer:
+                # create an event
                 cls.enqueue_event("HoldTimer_Expires")
 
 
@@ -49,4 +50,5 @@ async def decrease_keepalive_timer(cls):
             cls.logger.debug(f"keepalive_timer = {cls.keepalive_timer}")
             cls.keepalive_timer -= 1
             if not cls.keepalive_timer:
+                # create an event and pass
                 cls.enqueue_event("KeepaliveTimer_Expires")
