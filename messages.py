@@ -135,6 +135,8 @@ class UpdateMessage(BGPMessage):
     The minimum length of the UPDATE message is 23 octets -- 19 octets
    for the fixed header + 2 octets for the Withdrawn Routes Length + 2
 '''
+
+
     def extract_nlri(data, add_path):
         prefixes = []
         postfix = data
@@ -148,7 +150,7 @@ class UpdateMessage(BGPMessage):
             else:
                 prefix_length = ord(postfix[0:1])
             if prefix_length > 32:
-                raise NotificationMessage(3, 10) # Prefix Length larger than 32
+                raise NotificationMessage(3, 2) # Prefix Length larger than 32
             octet_length, remainder = int(prefix_length / 8), prefix_length % 8
             # if the prefix length is not in octet
             if remainder > 0:

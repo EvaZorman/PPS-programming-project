@@ -59,7 +59,8 @@ class NotificationMessage(BGPMessage, Exception):
         (2, 11): "Malformed AS_PATH",
 
         # uncompleted message errors
-        (3, 1): "The message is uncompleted or the rest hasn't arrived yet"
+        (3, 1): "The message is uncompleted or the rest hasn't arrived yet",
+        (3, 2): "Prefix Length larger than 32"
 
     }
 
@@ -80,3 +81,12 @@ class NotificationMessage(BGPMessage, Exception):
     #     msg = struct.pack("!BB", data['code'][1])
     #     return self(self.maker=data, msg_hex=msg)
 
+class FiniteStateMachineError:
+    # BGP Finite State
+    #    Machine Error
+    error_code = {
+        0: "Unspecified Error",
+        1: "Receive Unexpected Message in OpenSent State",
+        2: "Receive Unexpected Message in OpenSent State",
+        3: "Receive Unexpected Message in Established State"
+    }
