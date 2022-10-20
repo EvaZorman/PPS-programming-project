@@ -188,8 +188,6 @@ class UpdateMessage(BGPMessage):
         return nlri_raw_hex
 
 
-
-
 class KeepAliveMessage(BGPMessage):
     TYPE = 4
     TYPE_STR = "KEEPALIVE"
