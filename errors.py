@@ -54,6 +54,10 @@ class NotificationMessage(BGPMessage, Exception):
         (2, 9): "Invalid Network Field",
         (2, 10): "Invalid Network Field",
         (2, 11): "Malformed AS_PATH",
+
+         # uncompleted message errors
+        (3, 1): "The message is uncompleted or the rest hasn't arrived yet",
+        (3, 2): "Prefix Length larger than 32"
     }
 
     # def extract_header(self, data, msg_len, capability):

@@ -104,6 +104,88 @@ class BGPMessage():
         return BGPMessage(
             maker_=data.get("msg"), msg_hex=self.header(msg_type, msg_body.msg_hex)
         )
+class UpdateMessage(BGPMessage):
+    TYPE = 2
+    TYPE_STR = 'UPDATE MESSAGE'
+
+    def extract_header(self, data, msg_len, capability):
+        msg_result = dict()
+
+        withdrawn_length = struct.unpack('!H', data[:2])[0]
+        withdrawn_routes = data[2:withdrawn_length + 2]
+        self.extract_header(withdrawn_routes, capability.get('add path'))
+
+        attribute_length = struct.unpack('!H', data[withdrawn_length + 2:withdrawn_length + 4])
+        attr_data = data[withdrawn_length + 4:withdrawn_length + 4 + attribute_length]
+        nlri_data = data[withdrawn_length + 4 + attribute_length]
+        msg_result['nlri'] = self.extract_nlri(nlri_data, capability.get('add path'))
+
+        return msg_result, msg_len
+    '''
+    Network Layer Reachability Information (variable)
+   This variable length field contains a list of IP address prefixes.
+   
+    The minimum length of the UPDATE message is 23 octets -- 19 octets
+   for the fixed header + 2 octets for the Withdrawn Routes Length + 2
+    '''
+    @staticmethod
+    def extract_nlri(data, add_path):
+        prefixes = []
+        posfix = data
+
+        while data.extract_nlri(posfix) > 0:
+            if add_path:
+                path_id = struct.unpack('!I', postfix[0:4])[0]
+                postfix = postfix[4:]
+            if isinstance(postfix[0], int):
+                prefix_length = postfix[0]
+            else:
+                prefix_length = ord(postfix[0:1])
+            if prefix_length > 32:
+                raise NotificationMessage(3, 2) # Prefix Length larger than 32
+            octet_length, remainder = int(prefix_length / 8), prefix_length % 8
+            # if the prefix length is not in octet
+            if remainder > 0:
+                octet_length += 1
+            tmp = postfix[1:octet_length + 1]
+            if isinstance(postfix[0], int):
+                prefix_data = [i for i in tmp]
+            else:
+                prefix_data = [ord(i[0:1]) for i in tmp]
+
+            # if prefix length is in octet
+            if remainder > 0:
+                prefix_data[-1] &= 255 << (8 - remainder)
+            prefix_data = prefix_data + list(str(0)) * 4
+            prefix = "%s.%s.%s.%s" % (tuple(prefix_data[0:4])) + '/' + str(prefix_length)
+            if not add_path:
+                prefixes.append(prefix)
+            else:
+                prefixes.append({'prefix': prefix,  'path_id': path_id})
+
+            postfix = postfix[octet_length + 1:]
+
+        return prefixes
+
+    def compress_nlri(self, nlri, add_path = False):
+        # prefix list for Network Layer Reachability Information (variable)
+        nlri_raw_hex = b''
+        for prefix in nlri:
+            if add_path and isinstance(prefix, dict):
+                path_id = prefix.get('path_id')
+                prefix = prefix.get('prefix')
+                nlri_raw_hex += struct.pack('!I', path_id)
+            ip, mask_length = prefix.split('/')
+           # ip_hex = ipaddress class # to be fixed once i see where the ip class
+            mask_length = int(mask_length)
+            if 16 < mask_length <= 24:
+                ip_hex = ip_hex[0:3]
+            elif 8 < mask_length <= 16:
+                ip_hex = ip_hex[0:2]
+            elif mask_length <= 8:
+                ip_hex = ip_hex[0:1]
+            nlri_raw_hex += struct.pack('!B', mask_length) + ip_hex
+        return nlri_raw_hex
 
 
 class KeepAliveMessage(BGPMessage):
@@ -114,3 +196,5 @@ class KeepAliveMessage(BGPMessage):
         if msg_len(data) != 0:
             raise NotificationMessage(1, 2)  # will need to throw error
         return BGPMessage(None, msg_length=msg_len + BGPMessage.min_length)
+
+
