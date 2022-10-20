@@ -85,6 +85,13 @@ class Router:
         print("calculating...")
         pass
 
+    def broadcast_ip_prefix(self):
+        """
+        The router has set up all its necessary connections and sends an update
+        message which broadcasts its network prefix
+        """
+
+
     def initiate_connections(self, routes):
         for r in routes:
             self.speaker.bgp_connect(
