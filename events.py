@@ -1,6 +1,8 @@
 class Event:
     def __init__(
-        self, name, message=None,
+        self,
+        name,
+        message=None,
     ):
         print(f"Created event: {name}")
         self.name = name

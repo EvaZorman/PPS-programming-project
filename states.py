@@ -1,6 +1,7 @@
 class State:
     """
-    Possible states: IDLE, CONNECT, ACTIVE, OPEN_SENT, OPEN_CONFIRM, ESTABLISHED
+    Possible states: IDLE, CONNECT, ACTIVE, OPEN_SENT,
+    OPEN_CONFIRM, ESTABLISHED
     """
 
     def on_event(self, cls, event):

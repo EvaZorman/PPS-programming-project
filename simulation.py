@@ -144,12 +144,7 @@ def setup_simulation(routes):
     for as_choice, paths in routes.items():
         router_num = as_choice.strip("AS")
         router_list.append(
-            Router(
-                f"R{router_num}",
-                f"100.{router_num}.0.1",
-                int(router_num),
-                paths
-            )
+            Router(f"R{router_num}", f"100.{router_num}.0.1", int(router_num), paths)
         )
 
     # start the control and data plane listener that will run as long as the

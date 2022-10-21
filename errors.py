@@ -13,12 +13,21 @@ In addition to the fixed-size BGP header, the NOTIFICATION message
       BGP messages.
 """
 
-from messages import BGPMessage
+from messages import BGPMessage, Message
 
 
 class NotificationMessage(BGPMessage, Exception):
-    TYPE = 3
-    TYPE_STR = "Notification"
+    """
+    0                   1                   2                   3
+    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    | Error code    | Error subcode |   Data (variable)             |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    """
+    def __init__(self, error_subcode):
+        super().__init__()
+        self.message_type = Message.NOTIFICATION
+        self.min_length = 21  # octets
 
     error_code = {
         1: "Message Header Error",
@@ -54,10 +63,9 @@ class NotificationMessage(BGPMessage, Exception):
         (2, 9): "Invalid Network Field",
         (2, 10): "Invalid Network Field",
         (2, 11): "Malformed AS_PATH",
-
-         # uncompleted message errors
+        # uncompleted message errors
         (3, 1): "The message is uncompleted or the rest hasn't arrived yet",
-        (3, 2): "Prefix Length larger than 32"
+        (3, 2): "Prefix Length larger than 32",
     }
 
     # def extract_header(self, data, msg_len, capability):
@@ -78,13 +86,12 @@ class NotificationMessage(BGPMessage, Exception):
     #     return self(self.maker=data, msg_hex=msg)
 
 
-# TODO fix this
-class FiniteStateMachineError:
+class FiniteStateMachineError(Exception):
     # BGP Finite State
     #    Machine Error
     error_code = {
         0: "Unspecified Error",
         1: "Receive Unexpected Message in OpenSent State",
         2: "Receive Unexpected Message in OpenSent State",
-        3: "Receive Unexpected Message in Established State"
+        3: "Receive Unexpected Message in Established State",
     }

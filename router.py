@@ -91,7 +91,6 @@ class Router:
         message which broadcasts its network prefix
         """
 
-
     def initiate_connections(self, routes):
         for r in routes:
             self.speaker.bgp_connect(
@@ -107,7 +106,9 @@ class RouterListener:
         self.stop_listening = threading.Event()
         # Control and Data plane listener
         self.listen_bgp_socket = socket.create_server((socket.gethostname(), bgp_port))
-        self.listen_data_socket = socket.create_server((socket.gethostname(), data_port))
+        self.listen_data_socket = socket.create_server(
+            (socket.gethostname(), data_port)
+        )
 
     def listen(self, connections=11):
         self.listen_bgp_socket.listen(connections)
