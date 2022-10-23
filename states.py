@@ -72,7 +72,6 @@ class OpenSentState(State):
             cls.connect_retry_timer = cls.connect_retry_time
             return ActiveState()
         if event.get_name() == "BGPOpen":
-            message = event.message
             # Set the BGP ConnectRetryTimer to zero
             cls.connect_retry_timer = 0
             # I selected a Random value

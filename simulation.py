@@ -3,10 +3,10 @@ Handle the processing of the simulations after the environment
 has been set up.
 """
 import random
-import sys
 from collections import defaultdict
 from pprint import pprint
 from threading import Thread
+from time import sleep
 
 from router import Router
 
@@ -40,8 +40,8 @@ def generate_routing_paths(as_num, as_paths):
         # pick a random AS to path to
         for _ in range(num_of_paths):
             rnd_path = random.choice(tmp_list)
-            as_paths[f"AS{i+1}"].add(f"AS{rnd_path+1}")
-            as_paths[f"AS{rnd_path+1}"].add(f"AS{i+1}")
+            as_paths[f"AS{i+1}"].add(rnd_path+1)
+            as_paths[f"AS{rnd_path+1}"].add(i+1)
             tmp_list.remove(rnd_path)
 
     return as_paths
@@ -138,13 +138,14 @@ def setup_simulation(routes):
     """
     Handles the simulation process and the creation of necessary objects.
     """
-    pprint(routes)
     router_list = []
+
+    pprint(routes)
 
     for as_choice, paths in routes.items():
         router_num = as_choice.strip("AS")
         router_list.append(
-            Router(f"R{router_num}", f"100.{router_num}.0.1", int(router_num), paths)
+            Router(router_num, f"100.{router_num}.0.1", int(router_num), paths)
         )
 
     # start the control and data plane listener that will run as long as the
@@ -154,12 +155,25 @@ def setup_simulation(routes):
     # setup the TCP connections for each router based on their routes
     router_paths = list(routes.values())
     for router in router_list:
-        router.initiate_connections(router_paths[router_list.index(router)])
+        router.initiate_bgp_connection(router_paths[router_list.index(router)])
 
-    print("here we are")
+    """
+    TODO:
+        - stabilize the bgp connections so all routers and connections are in established
+        mode
+        - let all the routers broadcast their ip prefixes
+            - this needs to also ensure that any new updates generate a routing table
+            - also voting and trust values need to be added here!
+        - let user see the routing tables and add changes if needed
+        - create an ip packet and send it!
+        
+    Optional:
+        - see if we can simulate errors like shutting down a router etc.
+    """
 
-    stop_listeners(task_list=listener_threads, router_list=router_list)
-    sys.exit()
+    sleep(20)
+    # stop_listeners(task_list=listener_threads, router_list=router_list)
+    # sys.exit()
 
 
 def start_listeners(router_list):

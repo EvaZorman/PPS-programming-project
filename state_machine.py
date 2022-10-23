@@ -5,8 +5,6 @@ This part will handle the states a router needs to keep track of. Each
 router needs to track their own state with a state machine and act
 according to the BGP protocol.
 """
-import loguru
-
 from states import IdleState
 
 from timers import (
@@ -15,28 +13,21 @@ from timers import (
     decrease_keepalive_timer,
 )
 
-# from Sams Work import (
-#     send_keepalive_message,
-#     send_open_message,
-#     send_update_message,
-# )
-
-# from errors import (
-# notification_message,
-# )
-
 
 class BGPStateMachine:
     """
     I was under the impression each router would need its own state machine
     that isn't necessarily connected to a peer. With this, we can't just
-    create a router and assign a SM to it.
+    create a router and assign an SM to it.
     """
 
     def __init__(self, local_id, local_hold_time, peer_ip):
         """Class constructor"""
 
-        self.state = IdleState()
+        self.states = {}
+        for i in peer_ip:
+            print(f"peer id: {i}, type: {type(i)}")
+            self.states[i] = IdleState()
 
         self.event_queue = []
         self.event_serial_number = 0
@@ -53,8 +44,6 @@ class BGPStateMachine:
 
         self.connect_retry_time = 5
 
-        self.logger = loguru.logger
-
         self.local_id = local_id
         self.local_hold_time = local_hold_time
         self.peer_ip = peer_ip
@@ -62,37 +51,11 @@ class BGPStateMachine:
         self.peer_port = 0
         self.peer_id = None
 
-    def switch_state(self, event):
-        self.state = self.state.on_event(self, event)
+    def switch_state(self, peer, event):
+        self.states[peer] = self.states[peer].on_event(self, event)
 
-    def get_state(self):
-        return self.state
-
-    # def enqueue_event(self, event):
-    #     """Add new event to the event queue"""
-    #
-    #     # Add serial number to event for ease of debugging
-    #     self.event_serial_number += 1
-    #     event.set_event_serial_num(self.event_serial_number)
-    #
-    #     # In case Stop event is being enqueued flush the queue to expedite it
-    #
-    #     # If we implement Manual Stop and Automatic Stop couple of Mandatory
-    #     # Events then we need it
-    #
-    #     # if event.name in {"Event 2: ManualStop", "Event 8: AutomaticStop"}:
-    #     #     self.event_queue.clear()
-    #
-    #     self.event_queue.append(event)
-    #     self.logger.opt(ansi=True, depth=1).debug(
-    #         f"<cyan>[ENQ]</cyan> {event.get_name()} [#{event.get_serial_num()}]"
-    #     )
-    #
-    # def dequeue_event(self):
-    #     """Pick an event from the event queue"""
-    #
-    #     event = self.event_queue.pop(0)
-    #     self.logger.opt(ansi=True, depth=1).debug(
-    #         f"<cyan>[DEQ]</cyan> {event.get_name()} [#{event.get_serial_num()}]"
-    #     )
-    #     return event
+    def get_state(self, peer):
+        try:
+            return self.states[peer]
+        except KeyError:
+            return

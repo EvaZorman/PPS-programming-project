@@ -4,7 +4,6 @@ class Event:
         name,
         message=None,
     ):
-        print(f"Created event: {name}")
         self.name = name
         self.message = message
         self.serial_num = None
