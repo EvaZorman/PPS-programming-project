@@ -35,7 +35,7 @@ class BGPMessage:
         2. be able to verify the header
     """
 
-    def __init__(self, from_data, msg_length: int = None):
+    def __init__(self, router_number, msg_length: int = None):
         self.version = 4
         self.max_length = 4096
 
@@ -50,9 +50,7 @@ class BGPMessage:
         else:
             self.msg_length = msg_length
 
-        # we can use this data passed in the messages class to make
-        # sure we know where it came from
-        self.data_from = from_data
+        self.router_number = router_number
 
     def __str__(self):
         return self.msg_type.name
@@ -61,22 +59,22 @@ class BGPMessage:
         return self.msg_type
 
     def get_sender(self):
-        return self.data_from
+        return self.router_number
 
     def verify_header(self):
         if self.msg_length < self.min_length:
             # "msg=Message is less than minimum length") #links up with error file
-            raise NotificationMessage(self.data_from, (3, 1))
+            raise NotificationMessage(self.router_number, (3, 1))
 
         # only extract the 19 bytes of the BGP header data
         if self.marker != b"\xff" * 16:
-            raise NotificationMessage(self.data_from, (0, 1))
+            raise NotificationMessage(self.router_number, (0, 1))
 
         if self.msg_length < self.min_length or self.msg_length > self.max_length:
-            raise NotificationMessage(self.data_from, (0, 2))  # Bad Message Length
+            raise NotificationMessage(self.router_number, (0, 2))  # Bad Message Length
 
         if self.msg_type not in Message:
-            raise NotificationMessage(self.data_from, (0, 3))  # Bad Message Type
+            raise NotificationMessage(self.router_number, (0, 3))  # Bad Message Type
 
     def verify(self):
         return self.verify_header()
@@ -104,14 +102,14 @@ class UpdateMessage(BGPMessage):
 
     def __init__(
         self,
-        from_data,
+        router_number,
         withdrawn_routes_len=0,
         withdrawn_routes=None,
         total_pa_len=0,
         total_pa=None,
         nlri=None,
     ):
-        super().__init__(from_data)
+        super().__init__(router_number, 23 + withdrawn_routes_len + total_pa_len)
         self.msg_type = Message.UPDATE
         self.min_length = 23  # bytes
 
@@ -131,10 +129,10 @@ class UpdateMessage(BGPMessage):
     def verify(self):
         self.verify_header()
         if self.withdrawn_routes_len == 0 and self.withdrawn_routes:
-            raise NotificationMessage(self.data_from, (2, 1))  # Malformed Attribute List
+            raise NotificationMessage(self.router_number, (2, 1))  # Malformed Attribute List
 
         if self.total_pa_len == 0 and (self.nlri or self.total_pa):
-            raise NotificationMessage(self.data_from, (2, 1))  # Malformed Attribute List
+            raise NotificationMessage(self.router_number, (2, 1))  # Malformed Attribute List
 
     def get_nlri(self):
         return self.nlri
@@ -146,8 +144,11 @@ class KeepAliveMessage(BGPMessage):
     length of 19 bytes.
     """
 
-    def __init__(self, from_data):
-        super().__init__(from_data)
+    def __init__(
+        self,
+        router_number
+    ):
+        super().__init__(router_number)
         self.msg_type = Message.KEEPALIVE
 
     def verify(self):
@@ -176,30 +177,29 @@ class OpenMessage(BGPMessage):
     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
     """
 
-    def __init__(self, from_data, as_number, bgp_id, hold_time=30):
-        super().__init__(from_data)
+    def __init__(self, router_number, bgp_id, hold_time=30):
+        super().__init__(router_number, 29)
         self.msg_type = Message.OPEN
         self.min_length = 29  # bytes
 
-        self.as_number = as_number
         self.hold_time = hold_time
         self.bgp_id = bgp_id
 
     def verify(self):
         self.verify_header()
         if self.version != 4:
-            raise NotificationMessage(self.data_from, (1, 1))  # Unsupported version number
+            raise NotificationMessage(self.router_number, (1, 1))  # Unsupported version number
 
-        if self.as_number == 0:
-            raise NotificationMessage(self.data_from, (1, 2))  # Bad Peer AS
+        if int(self.router_number) < 0:
+            raise NotificationMessage(self.router_number, (1, 2))  # Bad Peer AS
 
-        if self.hold_time < 100 or self.hold_time == 0:
-            raise NotificationMessage(self.data_from, (1, 6))  # Unacceptable Hold Time
+        if self.hold_time > 100 or self.hold_time == 0:
+            raise NotificationMessage(self.router_number, (1, 6))  # Unacceptable Hold Time
 
         try:
             ipaddress.IPv4Address(self.bgp_id)
         except ipaddress.AddressValueError as e:
-            raise NotificationMessage(self.data_from, (1, 3)) from e  # Bad BGP Identifier
+            raise NotificationMessage(self.router_number, (1, 3)) from e  # Bad BGP Identifier
 
 
 class NotificationMessage(BGPMessage, Exception):
@@ -218,8 +218,8 @@ class NotificationMessage(BGPMessage, Exception):
     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
     """
 
-    def __init__(self, from_data, error_subcode):
-        super().__init__(from_data)
+    def __init__(self, router_number, error_subcode):
+        super().__init__(router_number, 21)
         self.msg_type = Message.NOTIFICATION
         self.min_length = 21  # octets
 

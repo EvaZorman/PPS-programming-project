@@ -35,7 +35,7 @@ class ConnectState(State):
             # Set the hold_timer to a large value, hold_timer value
             # of 4 minutes is suggested
             cls.hold_timer = 240
-            return OpenSentState()
+            return ActiveState()
 
         cls.connect_retry_counter += 1
         return IdleState()

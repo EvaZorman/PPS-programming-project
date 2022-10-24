@@ -8,6 +8,7 @@ from pprint import pprint
 from threading import Thread
 from time import sleep
 
+from messages import BGPMessage
 from router import Router
 
 
@@ -40,8 +41,8 @@ def generate_routing_paths(as_num, as_paths):
         # pick a random AS to path to
         for _ in range(num_of_paths):
             rnd_path = random.choice(tmp_list)
-            as_paths[f"AS{i+1}"].add(rnd_path+1)
-            as_paths[f"AS{rnd_path+1}"].add(i+1)
+            as_paths[f"AS{i+1}"].add(rnd_path + 1)
+            as_paths[f"AS{rnd_path+1}"].add(i + 1)
             tmp_list.remove(rnd_path)
 
     return as_paths
@@ -155,12 +156,13 @@ def setup_simulation(routes):
     # setup the TCP connections for each router based on their routes
     router_paths = list(routes.values())
     for router in router_list:
-        router.initiate_bgp_connection(router_paths[router_list.index(router)])
+        # sets up the initial connection and does all the necessary BGP exchanges to
+        # make sure the routers are in Established mode
+        for peer in router_paths[router_list.index(router)]:
+            router.bgp_send(peer, BGPMessage(router.name))
 
     """
     TODO:
-        - stabilize the bgp connections so all routers and connections are in established
-        mode
         - let all the routers broadcast their ip prefixes
             - this needs to also ensure that any new updates generate a routing table
             - also voting and trust values need to be added here!
@@ -184,7 +186,7 @@ def start_listeners(router_list):
     for r in router_list:
         t = Thread(target=r.start)
         thread_list.append(t)
-        t.daemon = True
+        #t.daemon = True
         t.start()
 
     return thread_list

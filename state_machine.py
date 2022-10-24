@@ -5,6 +5,8 @@ This part will handle the states a router needs to keep track of. Each
 router needs to track their own state with a state machine and act
 according to the BGP protocol.
 """
+import logging
+
 from states import IdleState
 
 from timers import (
@@ -26,7 +28,6 @@ class BGPStateMachine:
 
         self.states = {}
         for i in peer_ip:
-            print(f"peer id: {i}, type: {type(i)}")
             self.states[i] = IdleState()
 
         self.event_queue = []

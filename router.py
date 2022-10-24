@@ -1,4 +1,6 @@
+import logging
 import pickle
+import sched
 import select
 import socket
 import threading
@@ -12,7 +14,8 @@ from messages import (
     KeepAliveMessage,
     OpenMessage,
     NotificationMessage,
-    FiniteStateMachineError, BGPMessage,
+    FiniteStateMachineError,
+    Message,
 )
 from state_machine import BGPStateMachine
 
@@ -36,25 +39,8 @@ in the headers in binary format.
 """
 
 BUFFER_SIZE = 1024  # Normally 1024
-ROUTER_ADDRESSES = {
-    # "router name": (bgp_listener, data_listener),
-    # ...
-}
 
 S_PRINT_LOCK = threading.Lock()
-
-
-def get_router_addrs(r):
-    return ROUTER_ADDRESSES[f"R{r}"]
-
-
-def get_router(port):
-    try:
-        for r, p in ROUTER_ADDRESSES.items():
-            if port in p:
-                return r
-    except ValueError:
-        return
 
 
 def s_print(*args, **kwargs):
@@ -70,11 +56,11 @@ class Router:
     def __init__(self, name, ip, router_number, discovered_paths):
         self.name = name
         self.ip = ip
+
         self.sm = BGPStateMachine(f"SM-{name}", 5, discovered_paths)
+        self.message_scheduler = sched.scheduler()
 
         self.paths = discovered_paths
-        self.bgp_connections = 0
-
         self.path_table = []
 
         self.stop_listening = threading.Event()
@@ -88,12 +74,11 @@ class Router:
             port + 2: data_listener
             port + 3: data_speaker
         """
-        port = 2000 + (4 * router_number)
-        # generate global table of router : port table to enable lookup
-        ROUTER_ADDRESSES[f"R{self.name}"] = [port, port+1, port+2, port+3]
+        base_num = 2000 + 4 * router_number
+        self.ports = [base_num, base_num + 1, base_num + 2, base_num + 3]
 
-        self.listener = RouterListener(f"R{self.name}", port, port + 2)
-        self.speaker = RouterSpeaker(f"R{self.name}", port + 1, port + 3)
+        self.listener = RouterListener(f"R{self.name}", self.ports[0], self.ports[2])
+        self.speaker = RouterSpeaker(f"R{self.name}", self.ports[1], self.ports[3])
 
     def start(self, connections=11):
         # start listening
@@ -114,13 +99,10 @@ class Router:
                     # extract the data
                     pickled_data = bgp_client_socket.recv(BUFFER_SIZE)
                     message = pickle.loads(pickled_data)
-                    print(message)
-
-                    # get the peer who sent this data
-                    peer = get_router(message.get_sender())
+                    print(f"In router {self.name}; got {message} message from {message.get_sender()}")
 
                     # handle the message based on internal state
-                    self.handle_bgp_data(message, peer)
+                    self.handle_bgp_data(message)
                     bgp_client_socket.close()
 
                 if r is self.listener.listen_data_socket:
@@ -169,56 +151,91 @@ class Router:
         message which broadcasts its network prefix
         """
 
-    def handle_bgp_data(self, bgp_message, peer):
+    def bgp_send(self, peer_to_send, data):
+        l_bgp_port = 2000 + 4 * peer_to_send
+        self.speaker.bgp_send_message(l_bgp_port, data)
+
+    def handle_bgp_data(self, bgp_message):
         """
         Handles and qualifies the received message from a BGP speaker.
         """
-        peer = int(peer.replace("R", ""))
-        if isinstance(bgp_message, BGPMessage):
+        try:
+            peer = int(bgp_message.get_sender())
+        except ValueError:
+            raise FiniteStateMachineError()
+
+        if bgp_message.get_message_type() == Message.MESSAGE:
             # general BGP messages will be used to just notify the listeners that a TCP
             # connection has been set up
             if isinstance(self.sm.get_state(peer), states.IdleState):
-                self.sm.switch_state(peer, Event("ManualStart"))  # is now in Connect state
-                self.sm.switch_state(peer, Event("TcpConnectionConfirmed"))  # is now in Active state
-                print("in here!")
+                self.sm.switch_state(
+                    peer, Event("ManualStart")
+                )  # is now in Connect state
+                self.sm.switch_state(
+                    peer, Event("TcpConnectionConfirmed")
+                )  # is now in Active state
+                # schedule the speaker to send an open message to the peer
+                self.message_scheduler.enter(
+                    1,
+                    1,
+                    self.bgp_send,
+                    (peer, OpenMessage(self.name, self.ip))
+                )
+                self.message_scheduler.run()
                 return
 
-        if isinstance(bgp_message, OpenMessage):
+        if bgp_message.get_message_type() == Message.OPEN:
             if isinstance(self.sm.get_state(peer), states.ActiveState):
-                self.sm.switch_state(peer, Event("TcpConnectionConfirmed"))  # is now in OpenSent state
-                self.speaker.bgp_send_message(OpenMessage(self.speaker.bgp_port, self.name, self.ip))
+                self.message_scheduler.enter(
+                    1,
+                    1,
+                    self.bgp_send,
+                    (peer, OpenMessage(self.name, self.ip))
+                )
+                self.message_scheduler.run()
+                self.sm.switch_state(
+                    peer, Event("TcpConnectionConfirmed")
+                )  # is now in OpenSent state
                 return
 
             if isinstance(self.sm.get_state(peer), states.OpenSentState):
-                self.sm.switch_state(peer, Event("BGPOpen"))  # is now in OpenConfirm state
+                print("HERE WE AREEEEEEEEEE")
+                self.sm.switch_state(
+                    peer, Event("BGPOpen")
+                )  # is now in OpenConfirm state
                 bgp_message.verify()
-                self.speaker.bgp_send_message(KeepAliveMessage(self.speaker.bgp_port))
+                self.message_scheduler.enter(
+                    1,
+                    1,
+                    self.bgp_send,
+                    (peer, KeepAliveMessage(self.name))
+                )
+                self.message_scheduler.run()
                 return
 
-        if isinstance(bgp_message, UpdateMessage):
+        if bgp_message.get_message_type() == Message.UPDATE:
             if isinstance(self.sm.get_state(peer), states.EstablishedState):
-                self.update_routing_table(bgp_message)  # we got an update message, time to update table
+                self.update_routing_table(
+                    bgp_message
+                )  # we got an update message, time to update table
                 return
 
-        if isinstance(bgp_message, NotificationMessage):
+        if bgp_message.get_message_type() == Message.NOTIFICATION:
             s_print("Notification message received. Going back to idle state...")
             self.sm.switch_state(peer, Event("SomethingWentWrong"))
             return
 
-        if isinstance(bgp_message, KeepAliveMessage):
+        if bgp_message.get_message_type() == Message.KEEPALIVE:
             if isinstance(self.sm.get_state(peer), states.OpenConfirmState):
-                self.sm.switch_state(peer, Event("KeepAliveMsg"))  # is now in Established state
+                self.sm.switch_state(
+                    peer, Event("KeepAliveMsg")
+                )  # is now in Established state
+                s_print(f"Router {self.name} is now in state {self.sm.get_state(peer)}"
+                        f"with peer {peer}")
                 return
 
+        print("something went wrong apparently")
         raise FiniteStateMachineError()
-
-    def initiate_bgp_connection(self, routes):
-        for r in routes:
-            l_bgp_port, _, _, _ = get_router_addrs(r)
-            self.speaker.bgp_connect(l_bgp_port)
-            self.speaker.bgp_send_message(
-                BGPMessage(self.speaker.bgp_port, self.name)
-            )
 
 
 class RouterListener:
@@ -239,21 +256,24 @@ class RouterSpeaker:
         self.name = name
         self.bgp_port = bgp_port
         self.data_port = data_port
+
         # BGP control and data plane speaker
         self.speaker_bgp_socket = None
         self.speaker_data_socket = None
 
-    def bgp_connect(self, listener_port):
+    def _bgp_connect(self, listener_port):
         self.speaker_bgp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.speaker_bgp_socket.connect((socket.gethostname(), listener_port))
 
-    def bgp_send_message(self, data):
+    def bgp_send_message(self, l_port, data):
+        self._bgp_connect(l_port)
+        # TODO check if all data was sent
         s = self.speaker_bgp_socket.send(
             pickle.dumps(data),
         )
         self.speaker_bgp_socket.close()
 
-    def data_connect(self, server_port):
+    def _data_connect(self, server_port):
         self.speaker_data_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.speaker_data_socket.connect((socket.gethostname(), server_port))
 
