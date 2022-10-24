@@ -129,10 +129,14 @@ class UpdateMessage(BGPMessage):
     def verify(self):
         self.verify_header()
         if self.withdrawn_routes_len == 0 and self.withdrawn_routes:
-            raise NotificationMessage(self.router_number, (2, 1))  # Malformed Attribute List
+            raise NotificationMessage(
+                self.router_number, (2, 1)
+            )  # Malformed Attribute List
 
         if self.total_pa_len == 0 and (self.nlri or self.total_pa):
-            raise NotificationMessage(self.router_number, (2, 1))  # Malformed Attribute List
+            raise NotificationMessage(
+                self.router_number, (2, 1)
+            )  # Malformed Attribute List
 
     def get_nlri(self):
         return self.nlri
@@ -144,10 +148,7 @@ class KeepAliveMessage(BGPMessage):
     length of 19 bytes.
     """
 
-    def __init__(
-        self,
-        router_number
-    ):
+    def __init__(self, router_number):
         super().__init__(router_number)
         self.msg_type = Message.KEEPALIVE
 
@@ -188,18 +189,24 @@ class OpenMessage(BGPMessage):
     def verify(self):
         self.verify_header()
         if self.version != 4:
-            raise NotificationMessage(self.router_number, (1, 1))  # Unsupported version number
+            raise NotificationMessage(
+                self.router_number, (1, 1)
+            )  # Unsupported version number
 
         if int(self.router_number) < 0:
             raise NotificationMessage(self.router_number, (1, 2))  # Bad Peer AS
 
         if self.hold_time > 100 or self.hold_time == 0:
-            raise NotificationMessage(self.router_number, (1, 6))  # Unacceptable Hold Time
+            raise NotificationMessage(
+                self.router_number, (1, 6)
+            )  # Unacceptable Hold Time
 
         try:
             ipaddress.IPv4Address(self.bgp_id)
         except ipaddress.AddressValueError as e:
-            raise NotificationMessage(self.router_number, (1, 3)) from e  # Bad BGP Identifier
+            raise NotificationMessage(
+                self.router_number, (1, 3)
+            ) from e  # Bad BGP Identifier
 
 
 class NotificationMessage(BGPMessage, Exception):

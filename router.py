@@ -99,7 +99,9 @@ class Router:
                     # extract the data
                     pickled_data = bgp_client_socket.recv(BUFFER_SIZE)
                     message = pickle.loads(pickled_data)
-                    print(f"In router {self.name}; got {message} message from {message.get_sender()}")
+                    print(
+                        f"In router {self.name}; got {message} message from {message.get_sender()}"
+                    )
 
                     # handle the message based on internal state
                     self.handle_bgp_data(message)
@@ -176,10 +178,7 @@ class Router:
                 )  # is now in Active state
                 # schedule the speaker to send an open message to the peer
                 self.message_scheduler.enter(
-                    1,
-                    1,
-                    self.bgp_send,
-                    (peer, OpenMessage(self.name, self.ip))
+                    1, 1, self.bgp_send, (peer, OpenMessage(self.name, self.ip))
                 )
                 self.message_scheduler.run()
                 return
@@ -187,10 +186,7 @@ class Router:
         if bgp_message.get_message_type() == Message.OPEN:
             if isinstance(self.sm.get_state(peer), states.ActiveState):
                 self.message_scheduler.enter(
-                    1,
-                    1,
-                    self.bgp_send,
-                    (peer, OpenMessage(self.name, self.ip))
+                    1, 1, self.bgp_send, (peer, OpenMessage(self.name, self.ip))
                 )
                 self.message_scheduler.run()
                 self.sm.switch_state(
@@ -205,10 +201,7 @@ class Router:
                 )  # is now in OpenConfirm state
                 bgp_message.verify()
                 self.message_scheduler.enter(
-                    1,
-                    1,
-                    self.bgp_send,
-                    (peer, KeepAliveMessage(self.name))
+                    1, 1, self.bgp_send, (peer, KeepAliveMessage(self.name))
                 )
                 self.message_scheduler.run()
                 return
@@ -230,8 +223,10 @@ class Router:
                 self.sm.switch_state(
                     peer, Event("KeepAliveMsg")
                 )  # is now in Established state
-                s_print(f"Router {self.name} is now in state {self.sm.get_state(peer)}"
-                        f"with peer {peer}")
+                s_print(
+                    f"Router {self.name} is now in state {self.sm.get_state(peer)}"
+                    f"with peer {peer}"
+                )
                 return
 
         print("something went wrong apparently")

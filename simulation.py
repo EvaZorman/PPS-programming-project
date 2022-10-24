@@ -186,7 +186,7 @@ def start_listeners(router_list):
     for r in router_list:
         t = Thread(target=r.start)
         thread_list.append(t)
-        #t.daemon = True
+        # t.daemon = True
         t.start()
 
     return thread_list
