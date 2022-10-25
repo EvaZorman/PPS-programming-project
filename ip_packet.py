@@ -41,14 +41,36 @@ Steps to take when an IP package is received:
 """
 
 
-def generate():
+def generate(packet):
     # get whole header - the checksum field
     # split into 16 bit words
     # calculate 2's compliment
     # sum the words and remainders
     # 1's compliment
     # store the new checksum
-    pass
+
+    # splitting the message into bits
+    octet_1 = packet[0:8]
+    octet_2 = packet[8:16]
+    octet_3 = packet[16:24]
+    octet_4 = packet[24:32]
+
+    # sum packets in binary
+    total = bin(octet_1 + octet_2 + octet_3 + octet_4)[2:]
+
+    # Adding overflow bits
+    if len(total) > 8:
+        x = len(total) - 8
+        total = bin(int(total[0:x]) + int(total[8:x]))[2:] # reads from 2 since the results starts with ob
+
+    # calculating complement of sum
+    checksum = ''
+    for i in total:
+        if i == '1':
+            checksum += '0'
+        else:
+            checksum += '1'
+    return checksum
 
 
 def validate():
