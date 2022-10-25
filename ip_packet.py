@@ -61,7 +61,9 @@ def generate(packet):
     # Adding overflow bits
     if len(total) > 8:
         x = len(total) - 8
-        total = bin(int(total[0:x]) + int(total[8:x]))[2:] # reads from 2 since the results starts with ob
+        total = bin(int(total[0:x]) + int(total[8:x]))[2:]
+    if len(total) < 8:
+        total = '0'*(8 - len(total)) + total
 
     # calculating complement of sum
     checksum = ''
@@ -73,10 +75,36 @@ def generate(packet):
     return checksum
 
 
-def validate():
+def validate(received_packet, checksum):
     # get whole header - with checksum field
     # split into 16 bit words
     # calculate 2's compliment
     # sum the words and remainders
     # check if the result equals to all 1's or 0xFFFF
-    pass
+
+    # splitting the message into bits
+    octet_1 = received_packet[0:8]
+    octet_2 = received_packet[8:16]
+    octet_3 = received_packet[16:24]
+    octet_4 = received_packet[24:32]
+
+    # sum packets in binary
+    received_total = bin(octet_1 + octet_2 + octet_3 + octet_4)[2:]
+
+    if len(received_total) > 8:
+        x = len(received_total) - 8
+        received_total = bin(int(received_total[0:x]) + int(received_total[x:]))[2:]
+
+    # calculating complement of sum
+    received_checksum = ''
+    for i in received_checksum:
+        if i == '1':
+            received_checksum += '0'
+        else:
+            received_checksum += '1'
+    return received_checksum
+
+# comparison will need to be made with the generated checksum
+
+
+
