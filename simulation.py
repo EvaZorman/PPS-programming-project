@@ -213,9 +213,15 @@ def user_customisations(router_dict, router_paths):
                     print("Invalid AS number")
                     continue
 
-                custom_prefix = input(f"If you wish to create a custom IP prefix path to advertise, "
-                                      f"pass it as a list of attributes of <Network, MED, "
-                                      f"Loc_Pref, Weight>\n").replace(" ", "").split(",")
+                custom_prefix = (
+                    input(
+                        f"If you wish to create a custom IP prefix path to advertise, "
+                        f"pass it as a list of attributes of <Network, MED, "
+                        f"Loc_Pref, Weight>\n"
+                    )
+                    .replace(" ", "")
+                    .split(",")
+                )
 
                 if len(custom_prefix) == 4:
                     ip_prefix = [custom_prefix[0]]
@@ -227,7 +233,9 @@ def user_customisations(router_dict, router_paths):
                         "WEIGHT": custom_prefix[3],
                         "AS_PATH": str(router_num),
                     }
-                    router_dict[str(router_num)].advertise_ip_prefix(path_attr, ip_prefix)
+                    router_dict[str(router_num)].advertise_ip_prefix(
+                        path_attr, ip_prefix
+                    )
             except ValueError:
                 print("AS number not valid. Aborting...")
 
@@ -247,8 +255,10 @@ def user_customisations(router_dict, router_paths):
                     continue
 
                 choices = ["med", "locpref", "weight", "trustrate"]
-                choice_value = input(f"The possible choices are: {choices}. Pick which value to change. "
-                              f"You can only state the initial letter.").split()
+                choice_value = input(
+                    f"The possible choices are: {choices}. Pick which value to change. "
+                    f"You can only state the initial letter."
+                ).split()
                 if len(choice_value) != 1 or set(choice_value).issubset(set(choices)):
                     print("Incorrect value choice. Aborting...")
                     continue
@@ -271,17 +281,16 @@ def setup_simulation(routes):
 
     for as_choice, paths in routes.items():
         router_num = as_choice.strip("AS")
-        router_dict[router_num] = Router(router_num, f"50.{router_num}.0.1", int(router_num), paths)
+        router_dict[router_num] = Router(
+            router_num, f"50.{router_num}.0.1", int(router_num), paths
+        )
 
     # start the control and data plane listener that will run as long as the
     # main program is running, unless if we explicitly end them
     listener_threads = start_listeners(router_dict)
 
     # setup the TCP connections for each router based on their routes
-    router_paths = {
-            name.strip("AS"): paths
-            for name, paths in routes.items()
-        }
+    router_paths = {name.strip("AS"): paths for name, paths in routes.items()}
     for r_name, r_obj in router_dict.items():
         # sets up the initial connection and does all the necessary BGP exchanges to
         # make sure the routers are in Established mode
