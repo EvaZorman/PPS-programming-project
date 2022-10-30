@@ -7,7 +7,7 @@ according to the BGP protocol.
 """
 import logging
 
-from states import IdleState
+from states import IdleState, EstablishedState
 
 from timers import (
     decrease_connect_retry_timer,
@@ -27,7 +27,9 @@ class BGPStateMachine:
         """Class constructor"""
 
         self.states = {}
-        for i in peer_ip:
+        self.peer_ip = peer_ip
+
+        for i in self.peer_ip:
             self.states[i] = IdleState()
 
         self.event_queue = []
@@ -47,7 +49,6 @@ class BGPStateMachine:
 
         self.local_id = local_id
         self.local_hold_time = local_hold_time
-        self.peer_ip = peer_ip
 
         self.peer_port = 0
         self.peer_id = None
@@ -60,3 +61,9 @@ class BGPStateMachine:
             return self.states[peer]
         except KeyError:
             return
+
+    def all_setup(self):
+        for i in self.peer_ip:
+            if not isinstance(self.states[i], EstablishedState):
+                return False
+        return True

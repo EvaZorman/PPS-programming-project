@@ -118,9 +118,15 @@ class UpdateMessage(BGPMessage):
 
         # Note that we are ignoring the BGP RFC-4271 to make these easier to implement
         # and are using only a small subset of path attributes in the UPDATE messages
-        self.total_pa = total_pa  # [(attr. type, attr. value), ...]
+        self.total_pa = total_pa  # {attr. type: attr. value, ...}
         self.total_pa_len = total_pa_len  # "2 bytes" in size
-        self.possible_attributes = {"ORIGIN", "AS_PATH", "NEXT_HOP", "LOCAL_PREF"}
+        self.possible_attributes = {
+            "ORIGIN",
+            "NEXT_HOP",
+            "LOCAL_PREF",
+            "WEIGHT",
+            "AS_PATH",
+        }
 
         # UPDATE message Length - 23 - Total Path Attributes Length - Withdrawn Routes Length
         # path attributes advertised apply for the prefixes found in the NLRI
@@ -140,6 +146,9 @@ class UpdateMessage(BGPMessage):
 
     def get_nlri(self):
         return self.nlri
+
+    def get_path_attr(self):
+        return self.total_pa
 
 
 class KeepAliveMessage(BGPMessage):
@@ -209,15 +218,103 @@ class OpenMessage(BGPMessage):
             ) from e  # Bad BGP Identifier
 
 
-class VoteMessage(BGPMessage):
+class TrustRateMessage(BGPMessage):
     """
+        0                   1                   2                   3
+    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |               TTL             |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |             Origin            |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |        Peer in question       |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |         Path traversed        |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 
+    We decided to make the Voting message similar to the Open message.
+    The Voting message will contain the "TTL" value which will tell the
+    receiving parties who needs to answer and who doesn't.
+
+    TTL - will originally always be set to 1, any party that receives the message
+    checks its value, if it equals to 0, it is the 2nd neighbour and must answer the
+    query
+
+    Origin - the AS/router that is asking the q
+
+    Peer in question - the peer the router must vote for
+
+    Once a router receives a voting message with the TTL value 0, it returns it
+    to the peer in question, which forwards it to the origin. The origin updates its
+    routing table with the new information.
     """
 
     def __init__(self, router_number, bgp_id, hold_time=30):
         super().__init__(router_number, 29)
         self.msg_type = Message.OPEN
-        self.min_length = 29  # bytes
+        self.min_length = 19 + 6  # bytes
+
+        self.hold_time = hold_time
+        self.bgp_id = bgp_id
+
+    def verify(self):
+        self.verify_header()
+        if self.version != 4:
+            raise NotificationMessage(
+                self.router_number, (1, 1)
+            )  # Unsupported version number
+
+        if int(self.router_number) < 0:
+            raise NotificationMessage(self.router_number, (1, 2))  # Bad Peer AS
+
+        if self.hold_time > 100 or self.hold_time == 0:
+            raise NotificationMessage(
+                self.router_number, (1, 6)
+            )  # Unacceptable Hold Time
+
+        try:
+            ipaddress.IPv4Address(self.bgp_id)
+        except ipaddress.AddressValueError as e:
+            raise NotificationMessage(
+                self.router_number, (1, 3)
+            ) from e  # Bad BGP Identifier
+
+
+class VoteMessage(BGPMessage):
+    """
+        0                   1                   2                   3
+    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |               TTL             |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |             Origin            |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |        Peer in question       |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |         Path traversed        |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
+    We decided to make the Voting message similar to the Open message.
+    The Voting message will contain the "TTL" value which will tell the
+    receiving parties who needs to answer and who doesn't.
+
+    TTL - will originally always be set to 1, any party that receives the message
+    checks its value, if it equals to 0, it is the 2nd neighbour and must answer the
+    query
+
+    Origin - the AS/router that is asking the q
+
+    Peer in question - the peer the router must vote for
+
+    Once a router receives a voting message with the TTL value 0, it returns it
+    to the peer in question, which forwards it to the origin. The origin updates its
+    routing table with the new information.
+    """
+
+    def __init__(self, router_number, bgp_id, hold_time=30):
+        super().__init__(router_number, 29)
+        self.msg_type = Message.OPEN
+        self.min_length = 19 + 6  # bytes
 
         self.hold_time = hold_time
         self.bgp_id = bgp_id

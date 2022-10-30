@@ -57,10 +57,12 @@ class Router:
         self.name = name
         self.ip = ip
 
+        self.setup_complete = False
         self.sm = BGPStateMachine(f"SM-{name}", 5, discovered_paths)
         self.message_scheduler = sched.scheduler()
 
         self.paths = discovered_paths
+        self.trust_rates = {peer: 0 for peer in discovered_paths}
         self.path_table = []
 
         self.stop_listening = threading.Event()
@@ -99,9 +101,6 @@ class Router:
                     # extract the data
                     pickled_data = bgp_client_socket.recv(BUFFER_SIZE)
                     message = pickle.loads(pickled_data)
-                    print(
-                        f"In router {self.name}; got {message} message from {message.get_sender()}"
-                    )
 
                     # handle the message based on internal state
                     self.handle_bgp_data(message)
@@ -121,37 +120,62 @@ class Router:
         self.stop_listening.set()
 
     def update_routing_table(self, data):
-        # test data
-        self.path_table.append(
-            ["123.14.15.16", "0.0.0.0", "0", "", "32768", "1", "6 5 6 7"]
-        )
+        pa = data.get_path_attr()
+        nlri = data.get_nlri()
+
+        for i in nlri:
+            if self.name in pa["AS_PATH"]:
+                return False
+
+            self.path_table.append(
+                [
+                    i,
+                    pa["NEXT_HOP"],
+                    pa["MED"],
+                    pa["LOCAL_PREF"],
+                    pa["WEIGHT"],
+                    None,
+                    pa["AS_PATH"],
+                ]
+            )
+
         self.print_routing_table()
+        return True
 
     def print_routing_table(self):
-        s_print(
-            pandas.DataFrame(
-                self.path_table,
-                columns=[
-                    "Network",
-                    "Next Hop",
-                    "Metric",
-                    "LocPref",
-                    "Weight",
-                    "Trust",
-                    "Path",
-                ],
-            )
+        df = pandas.DataFrame(
+            self.path_table,
+            columns=[
+                "Network",
+                "Next_Hop",
+                "MED",
+                "Loc_Pref",
+                "Weight",
+                "Trust_Rate",
+                "AS_Path",
+            ],
         )
+        s_print(f"Routing table for router {self.name}:")
+        s_print(df.to_string() + "\n")
 
     def calculate_ip_route(self):
         s_print("calculating...")
         pass
 
-    def broadcast_ip_prefix(self):
+    def advertise_ip_prefix(self, path_attr, ip_prefix):
         """
-        The router has set up all its necessary connections and sends an update
-        message which broadcasts its network prefix
+        Advertise the passed prefix.
         """
+        for r in self.paths:
+            self.bgp_send(
+                r,
+                UpdateMessage(
+                    self.name,
+                    total_pa_len=len(path_attr.keys()),
+                    total_pa=path_attr,
+                    nlri=ip_prefix,
+                ),
+            )
 
     def bgp_send(self, peer_to_send, data):
         l_bgp_port = 2000 + 4 * peer_to_send
@@ -195,7 +219,6 @@ class Router:
                 return
 
             if isinstance(self.sm.get_state(peer), states.OpenSentState):
-                print("HERE WE AREEEEEEEEEE")
                 self.sm.switch_state(
                     peer, Event("BGPOpen")
                 )  # is now in OpenConfirm state
@@ -208,9 +231,23 @@ class Router:
 
         if bgp_message.get_message_type() == Message.UPDATE:
             if isinstance(self.sm.get_state(peer), states.EstablishedState):
-                self.update_routing_table(
+                # we got an update message, time to update table
+                propagate = self.update_routing_table(
                     bgp_message
-                )  # we got an update message, time to update table
+                )
+
+                if not propagate:
+                    return
+
+                # construct new update values
+                new_path_attr = bgp_message.get_path_attr()
+                new_path_attr["NEXT_HOP"] = self.ip
+                new_path_attr["AS_PATH"] = f"{self.name} " + new_path_attr["AS_PATH"]
+                # send new update message
+                self.message_scheduler.enter(
+                    1, 1, self.advertise_ip_prefix, (new_path_attr, bgp_message.get_nlri())
+                )
+                self.message_scheduler.run()
                 return
 
         if bgp_message.get_message_type() == Message.NOTIFICATION:
@@ -227,6 +264,11 @@ class Router:
                     f"Router {self.name} is now in state {self.sm.get_state(peer)}"
                     f"with peer {peer}"
                 )
+
+                # check if all connections are set up
+                if self.sm.all_setup():
+                    self.setup_complete = True
+
                 return
 
         print("something went wrong apparently")

@@ -63,15 +63,15 @@ def generate(packet):
         x = len(total) - 8
         total = bin(int(total[0:x]) + int(total[8:x]))[2:]
     if len(total) < 8:
-        total = '0'*(8 - len(total)) + total
+        total = "0" * (8 - len(total)) + total
 
     # calculating complement of sum
-    checksum = ''
+    checksum = ""
     for i in total:
-        if i == '1':
-            checksum += '0'
+        if i == "1":
+            checksum += "0"
         else:
-            checksum += '1'
+            checksum += "1"
     return checksum
 
 
@@ -96,15 +96,13 @@ def validate(received_packet, checksum):
         received_total = bin(int(received_total[0:x]) + int(received_total[x:]))[2:]
 
     # calculating complement of sum
-    received_checksum = ''
+    received_checksum = ""
     for i in received_checksum:
-        if i == '1':
-            received_checksum += '0'
+        if i == "1":
+            received_checksum += "0"
         else:
-            received_checksum += '1'
+            received_checksum += "1"
     return received_checksum
 
+
 # comparison will need to be made with the generated checksum
-
-
-

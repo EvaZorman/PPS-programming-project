@@ -161,11 +161,36 @@ def setup_simulation(routes):
         for peer in router_paths[router_list.index(router)]:
             router.bgp_send(peer, BGPMessage(router.name))
 
+    # Waiting for all the BGP setup to complete
+    for router in router_list:
+        while not router.setup_complete:
+            sleep(1)
+
+    # so now we have working routers that have all their dedicated routes connected
+    # and are in Established state within the BGP protocol. We now want to have each
+    # AS and router have their own ip prefix to which their packets will go. The IP
+    # prefixes will be set to a 100.<as number>.0.0/16 prefix by default.
+    #
+    # If a user wants to add additional prefixes to a router, enable them to do so
+    # after we've set up the default state
+    for router in router_list:
+        # advertise default prefixes
+        ip_prefix = [f"100.{router.name}.{router.name}.0/24"]
+        path_attr = {
+            "ORIGIN": router.name,
+            "NEXT_HOP": router.ip,
+            "MED": None,
+            "LOCAL_PREF": None,
+            "WEIGHT": None,
+            "AS_PATH": str(router.name),
+        }
+        router.advertise_ip_prefix(path_attr, ip_prefix)
+
+    # Now it's time to test out the voting and trust for the routers
+
+
     """
     TODO:
-        - let all the routers "broadcast" their ip prefixes
-            - this needs to also ensure that any new updates generate a 
-            routing table
             - also voting and trust values need to be added here!
         - let user see the routing tables and add changes if needed
         - create an ip packet and send it!
