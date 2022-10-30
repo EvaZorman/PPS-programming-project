@@ -209,6 +209,42 @@ class OpenMessage(BGPMessage):
             ) from e  # Bad BGP Identifier
 
 
+class VoteMessage(BGPMessage):
+    """
+
+    """
+
+    def __init__(self, router_number, bgp_id, hold_time=30):
+        super().__init__(router_number, 29)
+        self.msg_type = Message.OPEN
+        self.min_length = 29  # bytes
+
+        self.hold_time = hold_time
+        self.bgp_id = bgp_id
+
+    def verify(self):
+        self.verify_header()
+        if self.version != 4:
+            raise NotificationMessage(
+                self.router_number, (1, 1)
+            )  # Unsupported version number
+
+        if int(self.router_number) < 0:
+            raise NotificationMessage(self.router_number, (1, 2))  # Bad Peer AS
+
+        if self.hold_time > 100 or self.hold_time == 0:
+            raise NotificationMessage(
+                self.router_number, (1, 6)
+            )  # Unacceptable Hold Time
+
+        try:
+            ipaddress.IPv4Address(self.bgp_id)
+        except ipaddress.AddressValueError as e:
+            raise NotificationMessage(
+                self.router_number, (1, 3)
+            ) from e  # Bad BGP Identifier
+
+
 class NotificationMessage(BGPMessage, Exception):
     """ "
     https://www.rfc-editor.org/rfc/rfc4271.html

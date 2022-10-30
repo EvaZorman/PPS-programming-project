@@ -163,8 +163,9 @@ def setup_simulation(routes):
 
     """
     TODO:
-        - let all the routers broadcast their ip prefixes
-            - this needs to also ensure that any new updates generate a routing table
+        - let all the routers "broadcast" their ip prefixes
+            - this needs to also ensure that any new updates generate a 
+            routing table
             - also voting and trust values need to be added here!
         - let user see the routing tables and add changes if needed
         - create an ip packet and send it!
