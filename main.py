@@ -33,6 +33,11 @@ def parse_args():
         help="The number of AS systems to be used in the simulation.",
         default=10,
     )
+    parser.add_argument(
+        "--run-preset",
+        action="store_true",
+        help="The number of AS systems to be used in the simulation.",
+    )
     return parser.parse_args()
 
 
@@ -47,10 +52,25 @@ def main():
         f"\t Number of AS's: {args.as_number}\n".expandtabs(2)
     )
 
-    as_data = setup_as(args.as_number)
-    routes = generate_routing_paths(args.as_number, as_data)
-
-    setup_simulation(routes)
+    if args.run_preset:
+        print("This is a test setup which will always have the same network topology!")
+        routes = {
+            "AS1": {4, 7},
+            "AS10": {5},
+            "AS2": {9, 3, 7},
+            "AS3": {8, 2, 5, 7},
+            "AS4": {1, 5, 7},
+            "AS5": {10, 3, 4},
+            "AS6": {7},
+            "AS7": {1, 2, 3, 4, 6},
+            "AS8": {3},
+            "AS9": {2},
+        }
+        setup_simulation(routes)
+    else:
+        as_data = setup_as(args.as_number)
+        routes = generate_routing_paths(args.as_number, as_data)
+        setup_simulation(routes)
 
 
 if __name__ == "__main__":

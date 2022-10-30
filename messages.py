@@ -8,6 +8,8 @@ class Message(Enum):
     UPDATE = 2
     NOTIFICATION = 3
     KEEPALIVE = 4
+    TRUSTRATE = 5
+    VOTING = 6
 
 
 class BGPMessage:
@@ -220,16 +222,35 @@ class OpenMessage(BGPMessage):
 
 class TrustRateMessage(BGPMessage):
     """
+    The TrustRate message will be exchanged periodically only to keep the
+    trust rates up. Inherent trust will be set to 0.5 by default, and observed
+    trust will be changed for every 15 messages received. If there is no problem
+    with the peer, the observed trust will raise for 0.05 after every 15 messages
+    exchanged.
+    """
+
+    def __init__(self, router_number):
+        super().__init__(router_number)
+        self.msg_type = Message.TRUSTRATE
+
+    def verify(self):
+        self.verify_header()
+
+
+class VotingMessage(BGPMessage):
+    """
         0                   1                   2                   3
     0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
     |               TTL             |
     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |             Q or A            |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
     |             Origin            |
     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
     |        Peer in question       |
     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-    |         Path traversed        |
+    |           Vote value          |
     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 
     We decided to make the Voting message similar to the Open message.
@@ -240,106 +261,59 @@ class TrustRateMessage(BGPMessage):
     checks its value, if it equals to 0, it is the 2nd neighbour and must answer the
     query
 
+    Answer - if set to 0, it means it is requesting a vote, if set to 1, it is an
+    answer to a voting query
+
     Origin - the AS/router that is asking the q
 
     Peer in question - the peer the router must vote for
+
+    Vote value - the value of the vote a router provides for the query
 
     Once a router receives a voting message with the TTL value 0, it returns it
     to the peer in question, which forwards it to the origin. The origin updates its
     routing table with the new information.
     """
 
-    def __init__(self, router_number, bgp_id, hold_time=30):
-        super().__init__(router_number, 29)
-        self.msg_type = Message.OPEN
-        self.min_length = 19 + 6  # bytes
+    def __init__(
+        self, router_number, origin, q_or_a, peer_in_question, vote_value=None
+    ):
+        super().__init__(router_number, 27)
+        self.msg_type = Message.VOTING
+        self.voting_type = q_or_a
+        self.ttl = 1
+        self.origin = origin
+        self.peer_in_question = peer_in_question
+        self.vote_value = vote_value
 
-        self.hold_time = hold_time
-        self.bgp_id = bgp_id
-
-    def verify(self):
-        self.verify_header()
-        if self.version != 4:
-            raise NotificationMessage(
-                self.router_number, (1, 1)
-            )  # Unsupported version number
-
-        if int(self.router_number) < 0:
-            raise NotificationMessage(self.router_number, (1, 2))  # Bad Peer AS
-
-        if self.hold_time > 100 or self.hold_time == 0:
-            raise NotificationMessage(
-                self.router_number, (1, 6)
-            )  # Unacceptable Hold Time
-
-        try:
-            ipaddress.IPv4Address(self.bgp_id)
-        except ipaddress.AddressValueError as e:
-            raise NotificationMessage(
-                self.router_number, (1, 3)
-            ) from e  # Bad BGP Identifier
-
-
-class VoteMessage(BGPMessage):
-    """
-        0                   1                   2                   3
-    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
-    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-    |               TTL             |
-    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-    |             Origin            |
-    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-    |        Peer in question       |
-    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-    |         Path traversed        |
-    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-
-    We decided to make the Voting message similar to the Open message.
-    The Voting message will contain the "TTL" value which will tell the
-    receiving parties who needs to answer and who doesn't.
-
-    TTL - will originally always be set to 1, any party that receives the message
-    checks its value, if it equals to 0, it is the 2nd neighbour and must answer the
-    query
-
-    Origin - the AS/router that is asking the q
-
-    Peer in question - the peer the router must vote for
-
-    Once a router receives a voting message with the TTL value 0, it returns it
-    to the peer in question, which forwards it to the origin. The origin updates its
-    routing table with the new information.
-    """
-
-    def __init__(self, router_number, bgp_id, hold_time=30):
-        super().__init__(router_number, 29)
-        self.msg_type = Message.OPEN
-        self.min_length = 19 + 6  # bytes
-
-        self.hold_time = hold_time
-        self.bgp_id = bgp_id
+        self.min_length = 19 + 8  # bytes
 
     def verify(self):
         self.verify_header()
-        if self.version != 4:
-            raise NotificationMessage(
-                self.router_number, (1, 1)
-            )  # Unsupported version number
 
-        if int(self.router_number) < 0:
+        if int(self.origin) < 0:
             raise NotificationMessage(self.router_number, (1, 2))  # Bad Peer AS
 
-        if self.hold_time > 100 or self.hold_time == 0:
-            raise NotificationMessage(
-                self.router_number, (1, 6)
-            )  # Unacceptable Hold Time
+        if self.voting_type not in [0, 1]:
+            raise NotificationMessage(self.router_number, (0, 3))  # Bad message type
 
-        try:
-            ipaddress.IPv4Address(self.bgp_id)
-        except ipaddress.AddressValueError as e:
-            raise NotificationMessage(
-                self.router_number, (1, 3)
-            ) from e  # Bad BGP Identifier
+        if self.ttl == 0:
+            return True
+
+        self.ttl -= 1
+        return False
+
+    def get_peer_to_vote_for(self):
+        return self.peer_in_question
+
+    def get_origin(self):
+        return self.origin
+
+    def get_vote_value(self):
+        return self.vote_value
+
+    def get_voting_type(self):
+        return self.voting_type
 
 
 class NotificationMessage(BGPMessage, Exception):
