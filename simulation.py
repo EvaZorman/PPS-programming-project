@@ -8,6 +8,7 @@ from pprint import pprint
 from threading import Thread
 from time import sleep
 
+import router
 from messages import BGPMessage, VotingMessage
 from router import Router
 
@@ -154,9 +155,10 @@ def user_customisations(router_dict, router_paths):
 
     customisation_loop = True
     help_message = (
-        "To see the constructed routing tables, write p <AS number>\n"
+        "\nTo see the constructed routing tables, write p <AS number>\n"
         "To advertise a specific IP prefix, write a <AS number>\n"
         "To customise a table of a specific router, write c <AS number>\n"
+        "To remove a specific table entry, write d <AS number>\n"
         "To start voting for a specific router, write v <AS number>\n"
         "To have the commands printed again, write h\n"
         "To exit the customisation, write q"
@@ -167,16 +169,16 @@ def user_customisations(router_dict, router_paths):
         action = input().upper()
         action_list = action.split()
 
-        if len(action_list) != 2:
-            print("Badly formed input. Aborting...")
+        if "H" in action_list:
+            print(help_message)
             continue
 
         if "Q" in action_list:
             customisation_loop = False
             continue
 
-        if "H" in action_list:
-            print(help_message)
+        if len(action_list) != 2:
+            print("Badly formed input. Aborting...")
             continue
 
         if "P" in action_list:
@@ -217,13 +219,13 @@ def user_customisations(router_dict, router_paths):
                     input(
                         f"If you wish to create a custom IP prefix path to advertise, "
                         f"pass it as a list of attributes of <Network, MED, "
-                        f"Loc_Pref, Weight>\n"
+                        f"Loc_Pref, Weight, Trust_Rate>\n"
                     )
                     .replace(" ", "")
                     .split(",")
                 )
 
-                if len(custom_prefix) == 4:
+                if len(custom_prefix) == 5:
                     ip_prefix = [custom_prefix[0]]
                     path_attr = {
                         "ORIGIN": router_num,
@@ -231,6 +233,7 @@ def user_customisations(router_dict, router_paths):
                         "MED": custom_prefix[1],
                         "LOCAL_PREF": custom_prefix[2],
                         "WEIGHT": custom_prefix[3],
+                        "TRUST_RATE": custom_prefix[4],
                         "AS_PATH": str(router_num),
                     }
                     router_dict[str(router_num)].advertise_ip_prefix(
@@ -264,7 +267,27 @@ def user_customisations(router_dict, router_paths):
                     continue
 
                 actual_value = input("What would you like your new value to be?")
-                router.update_voting_value(row, choice_value, actual_value)
+                router.update_routing_table(row, choice_value, actual_value)
+            except ValueError:
+                print("AS number not valid. Aborting...")
+            continue
+
+        if "D" in action.split():
+            # print and customise the routing table for router X
+            try:
+                router_num = int(action_list[1])
+                if router_num < 1 or router_num > len(router_dict.keys()):
+                    print("Invalid AS number")
+                    continue
+
+                router = router_dict[str(router_num)]
+                router.print_routing_table()
+                row = int(input("Which row would you like to delete?"))
+                if row < 0 or row > router.get_routing_table_size():
+                    print("Incorrect row value chosen. Aborting...")
+                    continue
+
+                router.remove_table_entry(row)
             except ValueError:
                 print("AS number not valid. Aborting...")
             continue
@@ -314,16 +337,24 @@ def setup_simulation(routes):
         path_attr = {
             "ORIGIN": r_name,
             "NEXT_HOP": r_obj.ip,
-            "MED": None,
-            "LOCAL_PREF": None,
-            "WEIGHT": None,
+            "MED": 0,
+            "LOCAL_PREF": 0,
+            "WEIGHT": 0,
             "AS_PATH": r_name,
         }
         r_obj.advertise_ip_prefix(path_attr, ip_prefix)
         sleep(10)
 
+    # now that we have the routing tables generated, we can also generate the
+    # actual initial trust and voting values and edit them into the table
+    for r_name, r_obj in router_dict.items():
+        r_obj.start_voting(router_paths[r_name])
+
+    # any user customisation is possible here
     user_customisations(router_dict, router_paths)
 
+    # voting needs to be set off now, and combined with the trust values that
+    # could be fixed if wanted
     """
     TODO:
         - timers need to be added, or we can maybe use the scheduler

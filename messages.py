@@ -222,19 +222,40 @@ class OpenMessage(BGPMessage):
 
 class TrustRateMessage(BGPMessage):
     """
+            0                   1                   2
+    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |          Trust value          |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |           AS path             |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
     The TrustRate message will be exchanged periodically only to keep the
-    trust rates up. Inherent trust will be set to 0.5 by default, and observed
-    trust will be changed for every 15 messages received. If there is no problem
-    with the peer, the observed trust will raise for 0.05 after every 15 messages
-    exchanged.
+    trust rates up. Inherent trust will be set to a random value between 0.45 and
+    0.55 by default, and trust will be changed for every 15 messages received. If
+    there is no problem with the peer, the observed trust will raise for 0.1 after
+    every 15 messages exchanged.
+
+    The Trust value will be a combination of observed and inherent trust, since we
+    want to simplify this simulation. This can easily be changed later on if needed.
     """
 
-    def __init__(self, router_number):
-        super().__init__(router_number)
+    def __init__(self, router_number, as_num, trust_value):
+        super().__init__(router_number, 23)
         self.msg_type = Message.TRUSTRATE
+        self.min_length = 23
+
+        self.as_num = as_num
+        self.trust_value = trust_value
 
     def verify(self):
         self.verify_header()
+
+    def get_as_num(self):
+        return self.as_num
+
+    def get_trust_value(self):
+        return self.trust_value
 
 
 class VotingMessage(BGPMessage):
@@ -244,7 +265,7 @@ class VotingMessage(BGPMessage):
     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
     |               TTL             |
     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-    |             Q or A            |
+    |    Q or A     | Num. of peers |
     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
     |             Origin            |
     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -278,15 +299,16 @@ class VotingMessage(BGPMessage):
     def __init__(
         self, router_number, origin, q_or_a, peer_in_question, vote_value=None
     ):
-        super().__init__(router_number, 27)
+        super().__init__(router_number, 29)
         self.msg_type = Message.VOTING
         self.voting_type = q_or_a
-        self.ttl = 1
+        self.num_of_2nd_neighbours = 0
+        self.ttl = 2
         self.origin = origin
         self.peer_in_question = peer_in_question
         self.vote_value = vote_value
 
-        self.min_length = 19 + 8  # bytes
+        self.min_length = 19 + 10  # bytes
 
     def verify(self):
         self.verify_header()
@@ -297,14 +319,16 @@ class VotingMessage(BGPMessage):
         if self.voting_type not in [0, 1]:
             raise NotificationMessage(self.router_number, (0, 3))  # Bad message type
 
-        if self.ttl == 0:
-            return True
-
         self.ttl -= 1
-        return False
 
     def get_peer_to_vote_for(self):
         return self.peer_in_question
+
+    def set_num_of_2nd_neighbours(self, value):
+        self.num_of_2nd_neighbours = value
+
+    def get_num_of_2nd_neighbours(self):
+        return self.num_of_2nd_neighbours
 
     def get_origin(self):
         return self.origin
@@ -312,8 +336,11 @@ class VotingMessage(BGPMessage):
     def get_vote_value(self):
         return self.vote_value
 
-    def get_voting_type(self):
+    def is_answer(self):
         return self.voting_type
+
+    def is_at_2nd_point(self):
+        return self.ttl == 0
 
 
 class NotificationMessage(BGPMessage, Exception):

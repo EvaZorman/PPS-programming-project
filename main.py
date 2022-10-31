@@ -55,16 +55,16 @@ def main():
     if args.run_preset:
         print("This is a test setup which will always have the same network topology!")
         routes = {
-            "AS1": {4, 7},
-            "AS10": {5},
-            "AS2": {9, 3, 7},
-            "AS3": {8, 2, 5, 7},
+            "AS1": {4, 7, 9},
+            "AS2": {9, 3},
+            "AS3": {2, 5},
             "AS4": {1, 5, 7},
-            "AS5": {10, 3, 4},
-            "AS6": {7},
-            "AS7": {1, 2, 3, 4, 6},
-            "AS8": {3},
-            "AS9": {2},
+            "AS5": {3, 4, 10},
+            "AS6": {7, 10},
+            "AS7": {1, 4, 6},
+            "AS8": {9},
+            "AS9": {1, 2, 8},
+            "AS10": {5, 6},
         }
         setup_simulation(routes)
     else:

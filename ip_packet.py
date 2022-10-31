@@ -41,6 +41,23 @@ Steps to take when an IP package is received:
 """
 
 
+class IP_Packet:
+    def __init__(self):
+        self.version = 4
+        self.ihl = None
+        self.type_of_service = None
+        self.total_length = None
+        self.identification = None
+        self.flags = None
+        self.fragment_offset = None
+        self.ttl = None
+        self.protocol = None
+        self.header_checksum = None
+        self.source_addr = None
+        self.destination_addr = None
+        self.payload = None
+
+
 def generate(packet):
     # get whole header - the checksum field
     # split into 16 bit words

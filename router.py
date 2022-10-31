@@ -1,5 +1,6 @@
 import logging
 import pickle
+import random
 import sched
 import select
 import socket
@@ -18,6 +19,7 @@ from messages import (
     Message,
     VotingMessage,
     BGPMessage,
+    TrustRateMessage,
 )
 from state_machine import BGPStateMachine
 
@@ -54,6 +56,12 @@ def s_print(*args, **kwargs):
         print(*args, **kwargs)
 
 
+def get_random_trust_value():
+    # Generate random values from the interval [0.45, 0.55]
+    r = random.Random()
+    return r.randrange(45, 55) / 100
+
+
 class Router:
     def __init__(self, name, ip, router_number, discovered_paths):
         self.name = name
@@ -64,13 +72,17 @@ class Router:
         self.message_scheduler = sched.scheduler()
 
         self.paths = discovered_paths
-        self.trust_rates = {
-            peer: {"trust_rate": 0.5, "messages_exchanged": 0}
-            for peer in discovered_paths
-        }
         self.vote_rates = {peer: [] for peer in discovered_paths}
 
-        self.path_table = []
+        self.path_table = {
+            "Network": [],
+            "Next_Hop": [],
+            "MED": [],
+            "Loc_Pref": [],
+            "Weight": [],
+            "Trust_Rate": [],
+            "AS_Path": [],
+        }
 
         self.stop_listening = threading.Event()
 
@@ -126,12 +138,30 @@ class Router:
     def stop(self):
         self.stop_listening.set()
 
-    def update_voting_value(self, peer, voted_trust_value):
+    def update_voting_value(self, peer, num_of_2nd_neighbours, voted_trust_value):
         self.vote_rates[peer].append(voted_trust_value)
-        s_print(f"New voting table: {self.vote_rates}")
+
+        # if we have all the votes from the 2nd neighbours, update the new
+        # trust value
+        if len(self.vote_rates[peer]) == num_of_2nd_neighbours:
+            # get index value of the peer
+            index = self.path_table["AS_Path"].index(str(peer))
+            s_print(f"Got index for peer {peer} at: {index}")
+
+            voted_trust = 0
+            for v in self.vote_rates[peer]:
+                voted_trust += v
+
+            # construt the new trust value
+            self.path_table["Trust_Rate"][index] = (
+                0.4 * self.path_table["Trust_Rate"][index]
+            ) + (0.6 * (voted_trust / len(self.vote_rates[peer])))
+
+            self.vote_rates[peer].append(voted_trust_value)
+            s_print(f"New voting table: {self.vote_rates}")
 
     def get_routing_table_size(self):
-        return len(self.path_table)
+        return len(self.path_table["MED"])
 
     def update_routing_table(self, data):
         pa = data.get_path_attr()
@@ -141,48 +171,46 @@ class Router:
             if self.name in pa["AS_PATH"]:
                 return False
 
-            self.path_table.append(
-                [
-                    i,
-                    pa["NEXT_HOP"],
-                    pa["MED"],
-                    pa["LOCAL_PREF"],
-                    pa["WEIGHT"],
-                    0.5,
-                    pa["AS_PATH"],
-                ]
-            )
+            if "TRUST_RATE" not in pa:
+                self.path_table["Trust_Rate"].append(get_random_trust_value())
+            else:
+                self.path_table["Trust_Rate"].append(pa["TRUST_RATE"])
+
+            self.path_table["Network"].append(i)
+            self.path_table["Next_Hop"].append(pa["NEXT_HOP"])
+            self.path_table["MED"].append(pa["MED"])
+            self.path_table["Loc_Pref"].append(pa["LOCAL_PREF"])
+            self.path_table["Weight"].append(pa["WEIGHT"])
+            self.path_table["AS_Path"].append(pa["AS_PATH"])
+
         return True
 
     def customise_routing_table(self, row, choice, value):
-        new_entry = self.path_table[row]
         if choice == "m":
-            new_entry[2] = value
+            self.path_table["MED"][row] = value
         if choice == "l":
-            new_entry[3] = value
+            self.path_table["Loc_Pref"][row] = value
         if choice == "w":
-            new_entry[4] = value
+            self.path_table["Weight"][row] = value
         if choice == "t":
-            new_entry[5] = value
+            self.path_table["Trust_Rate"][row] = value
         self.print_routing_table()
 
     def print_routing_table(self):
-        df = pandas.DataFrame(
-            self.path_table,
-            columns=[
-                "Network",
-                "Next_Hop",
-                "MED",
-                "Loc_Pref",
-                "Weight",
-                "Trust_Rate",
-                "AS_Path",
-            ],
-        )
+        df = pandas.DataFrame(self.path_table)
         s_print(
             f"Routing table for router {self.name}: \n"
             f"{df.sort_values(by='Network').to_string()} \n"
         )
+
+    def remove_table_entry(self, row):
+        del self.path_table["Network"][row]
+        del self.path_table["Next_Hop"][row]
+        del self.path_table["MED"][row]
+        del self.path_table["Loc_Pref"][row]
+        del self.path_table["Weight"][row]
+        del self.path_table["Trust_Rate"][row]
+        del self.path_table["AS_Path"][row]
 
     def calculate_ip_route(self):
         s_print("calculating...")
@@ -195,6 +223,7 @@ class Router:
         self.setup_complete = False
 
         for r in self.paths:
+            # send the UPDATE message
             self.bgp_send(
                 r,
                 UpdateMessage(
@@ -206,8 +235,9 @@ class Router:
             )
 
     def start_voting(self, peer_list):
-        s_print(f"Sending voting messages to peers!")
+        s_print(f"Router {self.name} wants to get votes for {peer_list}")
         for peer in peer_list:
+            s_print(f"Router {self.name} requesting voting messages for peer {peer}")
             self.bgp_send(peer, VotingMessage(self.name, self.name, 0, peer))
 
     def bgp_send(self, peer_to_send, data):
@@ -274,6 +304,7 @@ class Router:
                 # construct new update values
                 new_path_attr = bgp_message.get_path_attr()
                 new_path_attr["NEXT_HOP"] = self.ip
+                new_path_attr["TRUST_RATE"] = 0
                 new_path_attr["AS_PATH"] = f"{self.name} " + new_path_attr["AS_PATH"]
                 # send new update message
                 self.message_scheduler.enter(
@@ -305,75 +336,79 @@ class Router:
                 return
 
         if bgp_message.get_message_type() == Message.VOTING:
-            s_print(
-                f"Received VOTING message from {bgp_message.get_origin()}"
-                f" for {bgp_message.get_peer_to_vote_for()}"
-            )
-            is_at_2nd_peer = bgp_message.verify()
+            # verify message and decrease TTL value
+            bgp_message.verify()
 
-            # if we are one of the routers that needs to vote, create a new message
-            if is_at_2nd_peer:
-                if (
-                    bgp_message.get_voting_type()
-                    and bgp_message.get_origin() == self.name
-                ):
-                    # we got our questions answered back
-                    s_print(
-                        f"Got VOTE for {bgp_message.get_peer_to_vote_for()} with value"
-                        f"{bgp_message.get_vote_value()}"
-                    )
-                    self.update_voting_value(
-                        bgp_message.get_peer_to_vote_for(),
-                        bgp_message.get_vote_value(),
-                    )
-                    return
+            # case 1: the message is to be forwarded to the 2nd neighbours
+            if not bgp_message.is_at_2nd_point() and not bgp_message.is_answer():
+                second_neighbours = list(self.paths)
+                second_neighbours.remove(int(bgp_message.get_origin()))
+                s_print(
+                    f"Forwarding VOTING message from {bgp_message.get_origin()} for "
+                    f"router to {self.name} to 2nd neighbours: {second_neighbours}"
+                )
+                bgp_message.set_num_of_2nd_neighbours(len(second_neighbours))
+                for p in second_neighbours:
+                    self.message_scheduler.enter(1, 1, self.bgp_send, (p, bgp_message))
+                    self.message_scheduler.run()
+                return
+
+            # case 2: the message is at a 2nd neighbour
+            if bgp_message.is_at_2nd_point() and not bgp_message.is_answer():
+                # get own trust value
+                index = self.path_table["AS_Path"].index(
+                    str(bgp_message.get_peer_to_vote_for())
+                )
+                vote_value = self.path_table["Trust_Rate"][index]
 
                 s_print(
-                    f"VOTING for {bgp_message.get_peer_to_vote_for()} with value"
-                    f"{self.trust_rates[bgp_message.get_peer_to_vote_for()]}"
+                    f"VOTING for {bgp_message.get_peer_to_vote_for()} by request of "
+                    f"router {bgp_message.get_origin()} with value {vote_value}."
                 )
-                s_print(f"My own trust rates (router {self.name}): {self.trust_rates}")
+                # create new VOTING message and send it back to the peer in question
+                vote_msg = VotingMessage(
+                    self.name,
+                    bgp_message.get_origin(),
+                    1,
+                    bgp_message.get_peer_to_vote_for(),
+                    vote_value,
+                )
+                vote_msg.set_num_of_2nd_neighbours(
+                    bgp_message.get_num_of_2nd_neighbours()
+                )
                 self.message_scheduler.enter(
                     1,
                     1,
                     self.bgp_send,
                     (
                         bgp_message.get_peer_to_vote_for(),
-                        VotingMessage(
-                            self.name,
-                            bgp_message.get_origin(),
-                            1,
-                            bgp_message.get_peer_to_vote_for(),
-                            self.trust_rates[bgp_message.get_peer_to_vote_for()][
-                                "trust_rate"
-                            ],
-                        ),
+                        vote_msg,
                     ),
                 )
                 self.message_scheduler.run()
                 return
 
-            # if we are forwarding the answers back to the origin
-            # 0 = asking for votes, 1 = is an answer
-            if bgp_message.get_voting_type():
-                s_print(f"Forwarding VOTING message back to origin!")
+            # case 3: the message is to be forwarded back to origin
+            if not bgp_message.is_at_2nd_point() and bgp_message.is_answer():
+                s_print(
+                    f"Forwarding VOTING message back to origin {bgp_message.get_origin()}"
+                    f" from router {self.name}"
+                )
                 self.message_scheduler.enter(
                     1, 1, self.bgp_send, (bgp_message.get_origin(), bgp_message)
                 )
                 self.message_scheduler.run()
                 return
 
-            # we need to forward the vote question to all our neighbours
-            # minus the peer we received the question from
-            s_print(f"Forwarding VOTING message to 2nd neighbours!")
-            peers_to_send = list(self.paths)
-            s_print(peers_to_send)
-            peers_to_send.remove(peer)
-            s_print(peers_to_send)
-            for p in peers_to_send:
-                self.message_scheduler.enter(1, 1, self.bgp_send, (p, bgp_message))
-                self.message_scheduler.run()
-            return
+            # case 4: the message is back to the original sender
+            if bgp_message.is_at_2nd_point() and bgp_message.is_answer():
+                s_print(f"Received VOTING message from {peer} at router {self.name}")
+                self.update_voting_value(
+                    bgp_message.get_peer_to_vote_for(),
+                    bgp_message.get_num_of_2nd_neighbours(),
+                    bgp_message.get_vote_value(),
+                )
+                return
 
         # reduce trust rate of peer
         # s_print(f"Got message from {peer} and it's a bad bad message!")
