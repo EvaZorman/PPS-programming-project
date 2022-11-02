@@ -240,19 +240,19 @@ class TrustRateMessage(BGPMessage):
     want to simplify this simulation. This can easily be changed later on if needed.
     """
 
-    def __init__(self, router_number, as_num, trust_value):
+    def __init__(self, router_number, trust_value, as_path):
         super().__init__(router_number, 23)
         self.msg_type = Message.TRUSTRATE
         self.min_length = 23
 
-        self.as_num = as_num
+        self.as_path = as_path
         self.trust_value = trust_value
 
     def verify(self):
         self.verify_header()
 
-    def get_as_num(self):
-        return self.as_num
+    def get_as_path(self):
+        return self.as_path
 
     def get_trust_value(self):
         return self.trust_value

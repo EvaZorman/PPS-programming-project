@@ -346,15 +346,19 @@ def setup_simulation(routes):
         sleep(10)
 
     # now that we have the routing tables generated, we can also generate the
-    # actual initial trust and voting values and edit them into the table
+    # actual initial trust and voting values for our neighbours and edit them
+    # into the table
     for r_name, r_obj in router_dict.items():
         r_obj.start_voting(router_paths[r_name])
+        sleep(5)
+
+    # time for us to do the rest of the trust distribution!
+    for r_name, r_obj in router_dict.items():
+        r_obj.distribute_trust_values(router_paths[r_name])
 
     # any user customisation is possible here
     user_customisations(router_dict, router_paths)
 
-    # voting needs to be set off now, and combined with the trust values that
-    # could be fixed if wanted
     """
     TODO:
         - timers need to be added, or we can maybe use the scheduler

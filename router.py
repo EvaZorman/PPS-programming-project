@@ -1,3 +1,4 @@
+import ipaddress
 import logging
 import pickle
 import random
@@ -57,7 +58,9 @@ def s_print(*args, **kwargs):
 
 
 def get_random_trust_value():
-    # Generate random values from the interval [0.45, 0.55]
+    """
+    Generate random values from the interval [0.45, 0.55]
+    """
     r = random.Random()
     return r.randrange(45, 55) / 100
 
@@ -75,13 +78,13 @@ class Router:
         self.vote_rates = {peer: [] for peer in discovered_paths}
 
         self.path_table = {
-            "Network": [],
-            "Next_Hop": [],
+            "NETWORK": [],
+            "NEXT_HOP": [],
             "MED": [],
-            "Loc_Pref": [],
-            "Weight": [],
-            "Trust_Rate": [],
-            "AS_Path": [],
+            "LOC_PREF": [],
+            "WEIGHT": [],
+            "TRUST_RATE": [],
+            "AS_PATH": [],
         }
 
         self.stop_listening = threading.Event()
@@ -101,7 +104,7 @@ class Router:
         self.listener = RouterListener(f"R{self.name}", self.ports[0], self.ports[2])
         self.speaker = RouterSpeaker(f"R{self.name}", self.ports[1], self.ports[3])
 
-    def start(self, connections=11):
+    def start(self, connections=50):
         # start listening
         self.listener.listen_bgp_socket.listen(connections)
         self.listener.listen_data_socket.listen(connections)
@@ -145,20 +148,36 @@ class Router:
         # trust value
         if len(self.vote_rates[peer]) == num_of_2nd_neighbours:
             # get index value of the peer
-            index = self.path_table["AS_Path"].index(str(peer))
+            index = self.path_table["AS_PATH"].index(str(peer))
             s_print(f"Got index for peer {peer} at: {index}")
 
             voted_trust = 0
             for v in self.vote_rates[peer]:
                 voted_trust += v
+            voted_trust = voted_trust / len(self.vote_rates[peer])
 
             # construt the new trust value
-            self.path_table["Trust_Rate"][index] = (
-                0.4 * self.path_table["Trust_Rate"][index]
+            self.path_table["TRUST_RATE"][index] = 1 / (
+                0.4 * self.path_table["TRUST_RATE"][index]
             ) + (0.6 * (voted_trust / len(self.vote_rates[peer])))
 
             self.vote_rates[peer].append(voted_trust_value)
             s_print(f"New voting table: {self.vote_rates}")
+
+    def distribute_trust_values(self, peer_list):
+        for i in peer_list:
+            # tell the other peers what is your trust value of chosen peer
+            peers_to_distribute = list(peer_list)
+            peers_to_distribute.remove(i)
+            # get the trust value of the chosen peer
+            trust_value = self.path_table["TRUST_RATE"][
+                self.path_table["AS_PATH"].index(str(i))
+            ]
+            for peer in peers_to_distribute:
+                # send all other peers the trust value and AS path of the chosen peer
+                self.bgp_send(
+                    peer, TrustRateMessage(self.name, trust_value, f"{self.name} {i}")
+                )
 
     def get_routing_table_size(self):
         return len(self.path_table["MED"])
@@ -172,16 +191,16 @@ class Router:
                 return False
 
             if "TRUST_RATE" not in pa:
-                self.path_table["Trust_Rate"].append(get_random_trust_value())
+                self.path_table["TRUST_RATE"].append(get_random_trust_value())
             else:
-                self.path_table["Trust_Rate"].append(pa["TRUST_RATE"])
+                self.path_table["TRUST_RATE"].append(pa["TRUST_RATE"])
 
-            self.path_table["Network"].append(i)
-            self.path_table["Next_Hop"].append(pa["NEXT_HOP"])
+            self.path_table["NETWORK"].append(i)
+            self.path_table["NEXT_HOP"].append(pa["NEXT_HOP"])
             self.path_table["MED"].append(pa["MED"])
-            self.path_table["Loc_Pref"].append(pa["LOCAL_PREF"])
-            self.path_table["Weight"].append(pa["WEIGHT"])
-            self.path_table["AS_Path"].append(pa["AS_PATH"])
+            self.path_table["LOC_PREF"].append(pa["LOCAL_PREF"])
+            self.path_table["WEIGHT"].append(pa["WEIGHT"])
+            self.path_table["AS_PATH"].append(pa["AS_PATH"])
 
         return True
 
@@ -189,32 +208,63 @@ class Router:
         if choice == "m":
             self.path_table["MED"][row] = value
         if choice == "l":
-            self.path_table["Loc_Pref"][row] = value
+            self.path_table["LOC_PREF"][row] = value
         if choice == "w":
-            self.path_table["Weight"][row] = value
+            self.path_table["WEIGHT"][row] = value
         if choice == "t":
-            self.path_table["Trust_Rate"][row] = value
+            self.path_table["TRUST_RATE"][row] = value
         self.print_routing_table()
 
     def print_routing_table(self):
         df = pandas.DataFrame(self.path_table)
         s_print(
             f"Routing table for router {self.name}: \n"
-            f"{df.sort_values(by='Network').to_string()} \n"
+            f"{df.sort_values(by='NETWORK').to_string()} \n"
         )
 
     def remove_table_entry(self, row):
-        del self.path_table["Network"][row]
-        del self.path_table["Next_Hop"][row]
+        del self.path_table["NETWORK"][row]
+        del self.path_table["NEXT_HOP"][row]
         del self.path_table["MED"][row]
-        del self.path_table["Loc_Pref"][row]
-        del self.path_table["Weight"][row]
-        del self.path_table["Trust_Rate"][row]
-        del self.path_table["AS_Path"][row]
+        del self.path_table["LOC_PREF"][row]
+        del self.path_table["WEIGHT"][row]
+        del self.path_table["TRUST_RATE"][row]
+        del self.path_table["AS_PATH"][row]
 
-    def calculate_ip_route(self):
-        s_print("calculating...")
+    def determine_next_hop(self, ip_packet):
+        """
+        Preferences:
+        1. the path with the highest WEIGHT
+        2. the path with the highest LOCAL_PREF
+        3. the path with the lowest TRUST_RATE
+        4. the path with the shortest AS_PATH
+        5. the path with the lowest MED
+        """
+        # get all stored networks
+        netw_addresses = set(self.path_table["NETWORK"])
+        # get the longest address match for the ip packet destination
+        common_bits_list = []
+        for addr in netw_addresses:
+            common_bits_list.append(
+                int(ipaddress.IPv4Address(ip_packet.get_destination_addr()))
+                ^ int(ipaddress.ip_network(addr).network_address)
+            )
+        # as far as i can see, we can really only XOR easily in Python, so let's
+        # XOR the addresses and the smallest value is the best match
+        print(common_bits_list)
+        longest_addr_match = common_bits_list[common_bits_list.index(min(common_bits_list))]
+
+        # find all entries that lead to that destination
+        possible_paths = [x for x in self.path_table["AS_PATH"] if ]
+        # run the checks to find the best path
+
         pass
+
+    def check_if_local_delivery(self, ip_packet):
+        # Check the destination address, if it matches, you're done
+        if self.ip == ip_packet.get_destination_addr():
+            return True
+        return False
 
     def advertise_ip_prefix(self, path_attr, ip_prefix):
         """
@@ -356,10 +406,10 @@ class Router:
             # case 2: the message is at a 2nd neighbour
             if bgp_message.is_at_2nd_point() and not bgp_message.is_answer():
                 # get own trust value
-                index = self.path_table["AS_Path"].index(
+                index = self.path_table["AS_PATH"].index(
                     str(bgp_message.get_peer_to_vote_for())
                 )
-                vote_value = self.path_table["Trust_Rate"][index]
+                vote_value = self.path_table["TRUST_RATE"][index]
 
                 s_print(
                     f"VOTING for {bgp_message.get_peer_to_vote_for()} by request of "
@@ -410,9 +460,46 @@ class Router:
                 )
                 return
 
+        if bgp_message.get_message_type() == Message.TRUSTRATE:
+            # check if we are already contained in the AS path
+            if self.name in bgp_message.get_as_path().split():
+                print("BIG NONO, we dropping this like a hot potato!")
+                return
+
+            # received the trust message, which means we need to update our table
+            try:
+                # add our own trust value of the peer to the received value
+                peer_trust = self.path_table["TRUST_RATE"][
+                    self.path_table["AS_PATH"].index(str(peer))
+                ]
+                index = self.path_table["AS_PATH"].index(bgp_message.get_as_path())
+                new_as_pah = str(self.name) + " " + bgp_message.get_as_path()
+                print(
+                    f"Adding new TRUST value in router {self.name} with AS_PATH of {bgp_message.get_as_path()}"
+                    f"and value of {peer_trust + bgp_message.get_trust_value()}"
+                )
+                new_trust_value = peer_trust + bgp_message.get_trust_value()
+                self.customise_routing_table(index, "t", new_trust_value)
+            except ValueError as e:
+                print(f"EVEN BIGGER ERROR IN router {self.name} YO!")
+                return
+
+            # pass along the trust message for any AS num that is not in the AS path
+            # of the trust message
+            for p in self.paths:
+                if p not in bgp_message.get_as_path().split():
+                    self.message_scheduler.enter(
+                        1,
+                        1,
+                        self.bgp_send,
+                        (p, TrustRateMessage(self.name, new_trust_value, new_as_pah)),
+                    )
+                    self.message_scheduler.run()
+            return
+
         # reduce trust rate of peer
         # s_print(f"Got message from {peer} and it's a bad bad message!")
-        # self.trust_rates[peer]["trust_rate"] -= 0.05
+        # self.trust_rates[peer]["TRUST_RATE"] -= 0.05
         self.sm.switch_state(peer, Event("ManualStop"))
         s_print("Something went wrong. Going back to Idle state!")
 
