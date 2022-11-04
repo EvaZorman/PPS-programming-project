@@ -6,6 +6,7 @@ import sched
 import select
 import socket
 import threading
+from time import sleep
 
 import pandas
 
@@ -86,6 +87,7 @@ class Router:
             "TRUST_RATE": [],
             "AS_PATH": [],
         }
+        self.advetised_prefixes = set()
 
         self.stop_listening = threading.Event()
 
@@ -133,9 +135,12 @@ class Router:
                         data_client_socket,
                         data_client_addr,
                     ) = self.listener.listen_data_socket.accept()
-                    # check where to pass it to
-                    s_print("received connection from: " + str(data_client_addr))
-                    data_client_socket.send("connection accepted".encode("ascii"))
+                    # extract the data
+                    pickled_data = data_client_socket.recv(BUFFER_SIZE)
+                    message = pickle.loads(pickled_data)
+
+                    # handle the message based on internal state
+                    self.handle_data(message)
                     data_client_socket.close()
 
     def stop(self):
@@ -178,6 +183,7 @@ class Router:
                 self.bgp_send(
                     peer, TrustRateMessage(self.name, trust_value, f"{self.name} {i}")
                 )
+                sleep(5)
 
     def get_routing_table_size(self):
         return len(self.path_table["MED"])
@@ -198,7 +204,7 @@ class Router:
             self.path_table["NETWORK"].append(i)
             self.path_table["NEXT_HOP"].append(pa["NEXT_HOP"])
             self.path_table["MED"].append(pa["MED"])
-            self.path_table["LOC_PREF"].append(pa["LOCAL_PREF"])
+            self.path_table["LOC_PREF"].append(pa["LOC_PREF"])
             self.path_table["WEIGHT"].append(pa["WEIGHT"])
             self.path_table["AS_PATH"].append(pa["AS_PATH"])
 
@@ -233,15 +239,10 @@ class Router:
 
     def determine_next_hop(self, ip_packet):
         """
-        Preferences:
-        1. the path with the highest WEIGHT
-        2. the path with the highest LOCAL_PREF
-        3. the path with the lowest TRUST_RATE
-        4. the path with the shortest AS_PATH
-        5. the path with the lowest MED
+        Figures out which is the best path and returns the next hop ip address.
         """
         # get all stored networks
-        netw_addresses = set(self.path_table["NETWORK"])
+        netw_addresses = list(set(self.path_table["NETWORK"]))
         # get the longest address match for the ip packet destination
         common_bits_list = []
         for addr in netw_addresses:
@@ -249,29 +250,88 @@ class Router:
                 int(ipaddress.IPv4Address(ip_packet.get_destination_addr()))
                 ^ int(ipaddress.ip_network(addr).network_address)
             )
-        # as far as i can see, we can really only XOR easily in Python, so let's
+        # as far as I can see, we can really only XOR easily in Python, so let's
         # XOR the addresses and the smallest value is the best match
         print(common_bits_list)
-        longest_addr_match = common_bits_list[common_bits_list.index(min(common_bits_list))]
+        longest_addr_match = netw_addresses[
+            common_bits_list.index(min(common_bits_list))
+        ]
 
-        # find all entries that lead to that destination
-        possible_paths = [x for x in self.path_table["AS_PATH"] if ]
+        # find all paths that lead to that destination
+        possible_path_indexes = []
+        for index, addr in enumerate(self.path_table["NETWORK"]):
+            if addr != longest_addr_match:
+                continue
+            possible_path_indexes.append(index)
+
         # run the checks to find the best path
+        best_path_index = self.find_best_path(possible_path_indexes)
+        s_print(
+            f"Found best possible path of: {self.path_table['AS_PATH'][best_path_index]}"
+        )
 
-        pass
+        # return the next hop value for the best found path
+        return self.path_table["AS_PATH"][best_path_index].split()[0]
+
+    def find_best_path(self, possible_path_indexes):
+        """
+        Preferences:
+        1. the path with the highest WEIGHT
+        2. the path with the highest LOC_PREF
+        3. the path with the lowest TRUST_RATE
+        4. the path with the shortest AS_PATH
+        5. the path with the lowest MED
+        """
+        # compare the entries
+        res = []
+        for i in possible_path_indexes:
+            if not res:
+                res = i
+
+            if self.path_table["WEIGHT"][res] < self.path_table["WEIGHT"][i]:
+                res = i
+                continue
+
+            if self.path_table["LOC_PREF"][res] < self.path_table["LOC_PREF"][i]:
+                res = i
+                continue
+
+            if self.path_table["TRUST_RATE"][res] > self.path_table["TRUST_RATE"][i]:
+                res = i
+                continue
+
+            if len(self.path_table["AS_PATH"][res]) > len(
+                self.path_table["AS_PATH"][i]
+            ):
+                res = i
+                continue
+
+            if self.path_table["MED"][res] > self.path_table["MED"][i]:
+                res = i
+                continue
+
+        return res
 
     def check_if_local_delivery(self, ip_packet):
         # Check the destination address, if it matches, you're done
         if self.ip == ip_packet.get_destination_addr():
             return True
+
+        for addr in self.advetised_prefixes:
+            if ipaddress.IPv4Address(ip_packet.get_destination_addr()) in ipaddress.ip_network(addr):
+                s_print(f"Packet for one of our announced prefixes at router {self.name}!")
+                return True
+
         return False
+
+    def add_advertised_ip_prefix(self, advertised_ip):
+        for ip in advertised_ip:
+            self.advetised_prefixes.add(ip)
 
     def advertise_ip_prefix(self, path_attr, ip_prefix):
         """
         Advertise the passed prefix.
         """
-        self.setup_complete = False
-
         for r in self.paths:
             # send the UPDATE message
             self.bgp_send(
@@ -293,6 +353,34 @@ class Router:
     def bgp_send(self, peer_to_send, data):
         l_bgp_port = 2000 + 4 * int(peer_to_send)
         self.speaker.bgp_send_message(l_bgp_port, data)
+
+    def data_send(self, peer_to_send, data):
+        l_data_port = 2000 + 4 * int(peer_to_send) + 2
+        self.speaker.send_data(l_data_port, data)
+
+    def handle_data(self, ip_packet):
+        s_print(f"Router {self.name} received an IP packet!")
+        # validate the packet
+        if not ip_packet.validate():
+            s_print(f"IP packet not valid at router {self.name}!")
+            return
+
+        # check if the packet is for us
+        if self.check_if_local_delivery(ip_packet):
+            s_print(f"IP packet found its home at AS {self.name}")
+            s_print(f"Packet destination addr: {ip_packet.get_destination_addr()}\nContents:\n\t{ip_packet.get_payload()}")
+            return
+
+        # at this point, find the next hop
+        next_hop_peer = self.determine_next_hop(ip_packet)
+        if not ip_packet.decrease_ttl():
+            s_print(f"Router {self.name} dropping an IP packet")
+            return
+
+        ip_packet.generate_new_checksum()
+
+        self.message_scheduler.enter(1, 1, self.data_send, (next_hop_peer, ip_packet))
+        self.message_scheduler.run()
 
     def handle_bgp_data(self, bgp_message):
         """
@@ -533,16 +621,18 @@ class RouterSpeaker:
 
     def bgp_send_message(self, l_port, data):
         self._bgp_connect(l_port)
-        # TODO check if all data was sent
         s = self.speaker_bgp_socket.send(
             pickle.dumps(data),
         )
         self.speaker_bgp_socket.close()
 
-    def _data_connect(self, server_port):
+    def _data_connect(self, listener_port):
         self.speaker_data_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.speaker_data_socket.connect((socket.gethostname(), server_port))
+        self.speaker_data_socket.connect((socket.gethostname(), listener_port))
 
-    def send_data(self, data):
-        s = self.speaker_data_socket.send(pickle.dumps(data))
-        self.speaker_bgp_socket.close()
+    def send_data(self, l_port, data):
+        self._data_connect(l_port)
+        s = self.speaker_data_socket.send(
+            pickle.dumps(data),
+        )
+        self.speaker_data_socket.close()

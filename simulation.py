@@ -9,6 +9,7 @@ from threading import Thread
 from time import sleep
 
 import router
+from ip_packet import IPPacket
 from messages import BGPMessage, VotingMessage
 from router import Router
 
@@ -140,26 +141,13 @@ def user_customisations(router_dict, router_paths):
     """
     Polls the user for any specific table changes they might want.
     """
-    # for router in router_list:
-    #     # advertise default prefixes
-    #     ip_prefix = [f"100.{router.name}.{router.name}.0/24"]
-    #     path_attr = {
-    #         "ORIGIN": router.name,
-    #         "NEXT_HOP": router.ip,
-    #         "MED": None,
-    #         "LOCAL_PREF": None,
-    #         "WEIGHT": None,
-    #         "AS_PATH": str(router.name),
-    #     }
-    #     router.advertise_ip_prefix(path_attr, ip_prefix)
-
     customisation_loop = True
     help_message = (
         "\nTo see the constructed routing tables, write p <AS number>\n"
         "To advertise a specific IP prefix, write a <AS number>\n"
         "To customise a table of a specific router, write c <AS number>\n"
         "To remove a specific table entry, write d <AS number>\n"
-        "To start voting for a specific router, write v <AS number>\n"
+        "To craft an IP packet and send it to an initial router, write ip <AS number>\n"
         "To have the commands printed again, write h\n"
         "To exit the customisation, write q"
     )
@@ -231,11 +219,12 @@ def user_customisations(router_dict, router_paths):
                         "ORIGIN": router_num,
                         "NEXT_HOP": router_dict[str(router_num)].ip,
                         "MED": custom_prefix[1],
-                        "LOCAL_PREF": custom_prefix[2],
+                        "LOC_PREF": custom_prefix[2],
                         "WEIGHT": custom_prefix[3],
                         "TRUST_RATE": custom_prefix[4],
                         "AS_PATH": str(router_num),
                     }
+                    router_dict[str(router_num)].add_advertised_ip_prefix(ip_prefix)
                     router_dict[str(router_num)].advertise_ip_prefix(
                         path_attr, ip_prefix
                     )
@@ -291,7 +280,22 @@ def user_customisations(router_dict, router_paths):
             except ValueError:
                 print("AS number not valid. Aborting...")
             continue
-    return
+
+        if "IP" in action.split():
+            # craft an IP packet and send it to initial chosen router
+            try:
+                router_num = int(action_list[1])
+                if router_num < 1 or router_num > len(router_dict.keys()):
+                    print("Invalid AS number")
+                    continue
+
+                router = router_dict[str(router_num)]
+
+                ip_packet = IPPacket(24, 5, 60, "192.168.12.14", "100.5.5.23", "Hello World!")
+                router.data_send(router_num, ip_packet)
+            except ValueError:
+                print("AS number not valid. Aborting...")
+            continue
 
 
 def setup_simulation(routes):
@@ -338,10 +342,11 @@ def setup_simulation(routes):
             "ORIGIN": r_name,
             "NEXT_HOP": r_obj.ip,
             "MED": 0,
-            "LOCAL_PREF": 0,
+            "LOC_PREF": 0,
             "WEIGHT": 0,
             "AS_PATH": r_name,
         }
+        r_obj.add_advertised_ip_prefix(ip_prefix)
         r_obj.advertise_ip_prefix(path_attr, ip_prefix)
         sleep(10)
 
