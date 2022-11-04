@@ -291,7 +291,9 @@ def user_customisations(router_dict, router_paths):
 
                 router = router_dict[str(router_num)]
 
-                ip_packet = IPPacket(24, 5, 60, "192.168.12.14", "100.5.5.23", "Hello World!")
+                ip_packet = IPPacket(
+                    24, 5, 60, "192.168.12.14", "100.5.5.23", "Hello World!"
+                )
                 router.data_send(router_num, ip_packet)
             except ValueError:
                 print("AS number not valid. Aborting...")

@@ -141,7 +141,7 @@ class IPPacket:
         for w in words:
             data_link_stream += w
 
-        data_link_stream += BitArray(hex=self.payload.encode('utf-8').hex()).bin
+        data_link_stream += BitArray(hex=self.payload.encode("utf-8").hex()).bin
 
         return data_link_stream
 
@@ -173,7 +173,8 @@ class IPPacket:
             BitArray(int=self.total_length, length=16).bin,
             BitArray(int=self.identification, length=16).bin,
             self.fragment_flags + BitArray(int=self.fragment_offset, length=13).bin,
-            BitArray(int=self.ttl, length=8).bin + BitArray(int=self.protocol, length=8).bin,
+            BitArray(int=self.ttl, length=8).bin
+            + BitArray(int=self.protocol, length=8).bin,
             BitArray(uint=checksum, length=16).bin,
             bin(int(ipaddress.IPv4Address(self.source_addr)))[2:18],
             bin(int(ipaddress.IPv4Address(self.source_addr)))[18:34],

@@ -318,8 +318,12 @@ class Router:
             return True
 
         for addr in self.advetised_prefixes:
-            if ipaddress.IPv4Address(ip_packet.get_destination_addr()) in ipaddress.ip_network(addr):
-                s_print(f"Packet for one of our announced prefixes at router {self.name}!")
+            if ipaddress.IPv4Address(
+                ip_packet.get_destination_addr()
+            ) in ipaddress.ip_network(addr):
+                s_print(
+                    f"Packet for one of our announced prefixes at router {self.name}!"
+                )
                 return True
 
         return False
@@ -368,7 +372,9 @@ class Router:
         # check if the packet is for us
         if self.check_if_local_delivery(ip_packet):
             s_print(f"IP packet found its home at AS {self.name}")
-            s_print(f"Packet destination addr: {ip_packet.get_destination_addr()}\nContents:\n\t{ip_packet.get_payload()}")
+            s_print(
+                f"Packet destination addr: {ip_packet.get_destination_addr()}\nContents:\n\t{ip_packet.get_payload()}"
+            )
             return
 
         # at this point, find the next hop
