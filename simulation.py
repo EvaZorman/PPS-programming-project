@@ -2,16 +2,19 @@
 Handle the processing of the simulations after the environment
 has been set up.
 """
+import logging
 import random
+import sys
 from collections import defaultdict
 from pprint import pprint
 from threading import Thread
 from time import sleep
 
-import router
 from ip_packet import IPPacket
-from messages import BGPMessage, VotingMessage
-from router import Router
+from messages import BGPMessage
+from router import Router, s_print
+
+logger = logging.getLogger("BGP")
 
 
 def generate_routing_paths(as_num, as_paths):
@@ -85,7 +88,7 @@ def setup_as(as_num):
         return as_paths
 
     if custom_paths.upper() != "Y":
-        print("Wrong answer :O Aborting...")
+        print("Wrong input. Aborting...")
         return as_paths
 
     loop = True
@@ -129,8 +132,10 @@ def setup_as(as_num):
             if item not in as_paths:
                 continue
 
-            as_paths[item].add(as_of_choice)
-            as_paths[as_of_choice].update(set(paths))
+            as_paths[item].add(int(as_of_choice.strip("AS")))
+            as_paths[as_of_choice].update(
+                set([int(path.strip("AS")) for path in paths])
+            )
 
         print_path_table(as_paths)
 
@@ -182,25 +187,12 @@ def user_customisations(router_dict, router_paths):
                 print("AS number not valid. Aborting...")
             continue
 
-        if "V" in action_list:
-            # starts the voting process for router X
-            try:
-                router_num = int(action_list[1])
-                if router_num < 1 or router_num > len(router_dict.keys()):
-                    print("Invalid AS number")
-                    continue
-
-                router_dict[str(router_num)].start_voting(router_paths[str(router_num)])
-            except ValueError:
-                print("AS number not valid. Aborting...")
-            continue
-
         if "A" in action_list:
             # print the routing table for router X
             try:
                 router_num = int(action_list[1])
                 if router_num < 1 or router_num > len(router_dict.keys()):
-                    print("Invalid AS number")
+                    s_print("Invalid AS number")
                     continue
 
                 custom_prefix = (
@@ -248,15 +240,15 @@ def user_customisations(router_dict, router_paths):
 
                 choices = ["med", "locpref", "weight", "trustrate"]
                 choice_value = input(
-                    f"The possible choices are: {choices}. Pick which value to change. "
-                    f"You can only state the initial letter."
+                    f"The possible choices are: {choices}.\nPick which value to change. "
+                    f"You can only state the initial letter.\n"
                 ).split()
                 if len(choice_value) != 1 or set(choice_value).issubset(set(choices)):
                     print("Incorrect value choice. Aborting...")
                     continue
 
-                actual_value = input("What would you like your new value to be?")
-                router.update_routing_table(row, choice_value, actual_value)
+                actual_value = input("\nWhat would you like your new value to be?\n")
+                router.customise_routing_table(row, choice_value, actual_value)
             except ValueError:
                 print("AS number not valid. Aborting...")
             continue
@@ -291,9 +283,16 @@ def user_customisations(router_dict, router_paths):
 
                 router = router_dict[str(router_num)]
 
-                ip_packet = IPPacket(
-                    24, 5, 60, "192.168.12.14", "100.5.5.23", "Hello World!"
+                ip_data = (
+                    input(
+                        f"If you wish to create a custom IP packet, pass a list of attributes of <Source addr.,"
+                        f" Destination addr., Payload>\n"
+                    )
+                    .replace(" ", "")
+                    .split(",")
                 )
+
+                ip_packet = IPPacket(24, 5, 60, ip_data[0], ip_data[1], ip_data[2])
                 router.data_send(router_num, ip_packet)
             except ValueError:
                 print("AS number not valid. Aborting...")
@@ -306,6 +305,7 @@ def setup_simulation(routes):
     """
     router_dict = {}
 
+    s_print(f"Generated network topology for the simulation:")
     pprint(routes)
 
     for as_choice, paths in routes.items():
@@ -316,20 +316,34 @@ def setup_simulation(routes):
 
     # start the control and data plane listener that will run as long as the
     # main program is running, unless if we explicitly end them
+    s_print("Starting listener threads...")
     listener_threads = start_listeners(router_dict)
 
-    # setup the TCP connections for each router based on their routes
+    # Set up the TCP connections for each router based on their routes
+    s_print("Setting up TCP connections and pushing routers into Established mode...")
     router_paths = {name.strip("AS"): paths for name, paths in routes.items()}
     for r_name, r_obj in router_dict.items():
         # sets up the initial connection and does all the necessary BGP exchanges to
         # make sure the routers are in Established mode
         for peer in router_paths[r_name]:
+            logger.info(f"Setting up TCP connection with router {peer}...")
             r_obj.bgp_send(peer, BGPMessage(r_obj.name))
 
     # Waiting for all the BGP setup to complete
+    while not all([r_obj.bgp_setup_complete for r_obj in router_dict.values()]):
+        sleep(1)
+
+    # We now generate the initial trust and voting values for our neighbours
+    # and add them into their respective tables
+    s_print(f"Starting the initial trust and voting process for all nodes...")
     for r_name, r_obj in router_dict.items():
-        while not r_obj.setup_complete:
-            sleep(1)
+        r_obj.setup_complete = False
+        logger.info(f"Router {r_name} is starting the voting procedures...")
+        r_obj.start_voting(router_paths[r_name])
+
+    # Waiting for all the voting setup to complete
+    while not all([r_obj.voting_setup_complete for r_obj in router_dict.values()]):
+        sleep(1)
 
     # so now we have working routers that have all their dedicated routes connected
     # and are in Established state within the BGP protocol. We now want to have each
@@ -338,6 +352,7 @@ def setup_simulation(routes):
     #
     # If a user wants to add additional prefixes to a router, enable them to do so
     # after we've set up the default state
+    s_print(f"Starting advertising default IP prefixes...")
     for r_name, r_obj in router_dict.items():
         ip_prefix = [f"100.{r_name}.{r_name}.0/24"]
         path_attr = {
@@ -346,38 +361,28 @@ def setup_simulation(routes):
             "MED": 0,
             "LOC_PREF": 0,
             "WEIGHT": 0,
+            "TRUST_RATE": 0,
             "AS_PATH": r_name,
         }
         r_obj.add_advertised_ip_prefix(ip_prefix)
+        logger.info(f"Router {r_name} advertising IP prefix of: {ip_prefix}")
         r_obj.advertise_ip_prefix(path_attr, ip_prefix)
-        sleep(10)
-
-    # now that we have the routing tables generated, we can also generate the
-    # actual initial trust and voting values for our neighbours and edit them
-    # into the table
-    for r_name, r_obj in router_dict.items():
-        r_obj.start_voting(router_paths[r_name])
-        sleep(5)
 
     # time for us to do the rest of the trust distribution!
-    for r_name, r_obj in router_dict.items():
-        r_obj.distribute_trust_values(router_paths[r_name])
+    # s_print(f"Starting to distribute TRUST_RATE messages between all nodes...")
+    # for r_name, r_obj in router_dict.items():
+    #     logger.info(
+    #         f"Router {r_name} is distributing its own trust rates of neighbours..."
+    #     )
+    #     r_obj.distribute_trust_values(router_paths[r_name])
+
+    # Waiting for all the UPDATE setup to complete
+    while not all([r_obj.advertise_setup_complete for r_obj in router_dict.values()]):
+        sleep(1)
 
     # any user customisation is possible here
     user_customisations(router_dict, router_paths)
-
-    """
-    TODO:
-        - timers need to be added, or we can maybe use the scheduler
-        - create an ip packet and send it!
-        
-    Optional:
-        - see if we can simulate errors like shutting down a router etc.
-    """
-
-    sleep(5)
-    # stop_listeners(task_list=listener_threads, router_list=router_list)
-    # sys.exit()
+    sys.exit()
 
 
 def start_listeners(router_list):

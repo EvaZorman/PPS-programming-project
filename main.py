@@ -11,6 +11,7 @@ will be handled by the following steps:
 understandable to the user
 """
 import argparse
+import os
 
 from simulation import (
     generate_routing_paths,
@@ -33,11 +34,11 @@ def parse_args():
         help="The number of AS systems to be used in the simulation.",
         default=10,
     )
-    parser.add_argument(
-        "--run-preset",
-        action="store_true",
-        help="The number of AS systems to be used in the simulation.",
-    )
+    # parser.add_argument(
+    #     "--run-preset",
+    #     action="store_true",
+    #     help="The number of AS systems to be used in the simulation.",
+    # )
     return parser.parse_args()
 
 
@@ -52,7 +53,7 @@ def main():
         f"\t Number of AS's: {args.as_number}\n".expandtabs(2)
     )
 
-    if args.run_preset:
+    if os.environ.get("TEST_RUN"):
         print("This is a test setup which will always have the same network topology!")
         routes = {
             "AS1": {4, 7, 9},

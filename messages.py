@@ -122,13 +122,6 @@ class UpdateMessage(BGPMessage):
         # and are using only a small subset of path attributes in the UPDATE messages
         self.total_pa = total_pa  # {attr. type: attr. value, ...}
         self.total_pa_len = total_pa_len  # "2 bytes" in size
-        self.possible_attributes = {
-            "ORIGIN",
-            "NEXT_HOP",
-            "LOCAL_PREF",
-            "WEIGHT",
-            "AS_PATH",
-        }
 
         # UPDATE message Length - 23 - Total Path Attributes Length - Withdrawn Routes Length
         # path attributes advertised apply for the prefixes found in the NLRI
@@ -222,40 +215,23 @@ class OpenMessage(BGPMessage):
 
 class TrustRateMessage(BGPMessage):
     """
-            0                   1                   2
-    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
-    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-    |          Trust value          |
-    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-    |           AS path             |
-    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-
     The TrustRate message will be exchanged periodically only to keep the
     trust rates up. Inherent trust will be set to a random value between 0.45 and
     0.55 by default, and trust will be changed for every 15 messages received. If
-    there is no problem with the peer, the observed trust will raise for 0.1 after
-    every 15 messages exchanged.
+    there is no problem with the peer, the inherent trust will raise for 0.1 after
+    every 20 messages exchanged.
 
     The Trust value will be a combination of observed and inherent trust, since we
     want to simplify this simulation. This can easily be changed later on if needed.
     """
 
-    def __init__(self, router_number, trust_value, as_path):
-        super().__init__(router_number, 23)
+    def __init__(self, router_number):
+        super().__init__(router_number, 19)
         self.msg_type = Message.TRUSTRATE
-        self.min_length = 23
-
-        self.as_path = as_path
-        self.trust_value = trust_value
+        self.min_length = 19
 
     def verify(self):
         self.verify_header()
-
-    def get_as_path(self):
-        return self.as_path
-
-    def get_trust_value(self):
-        return self.trust_value
 
 
 class VotingMessage(BGPMessage):
@@ -323,6 +299,12 @@ class VotingMessage(BGPMessage):
 
     def get_peer_to_vote_for(self):
         return self.peer_in_question
+
+    def set_router_num(self, num):
+        self.router_number = num
+
+    def set_to_answer(self):
+        self.voting_type = 1
 
     def set_num_of_2nd_neighbours(self, value):
         self.num_of_2nd_neighbours = value

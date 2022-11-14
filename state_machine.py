@@ -15,6 +15,8 @@ from timers import (
     decrease_keepalive_timer,
 )
 
+logger = logging.getLogger("BGP")
+
 
 class BGPStateMachine:
     """
